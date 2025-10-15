@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # This script installs the Filebrowser Quantum fork by building it from source.
-# Version 4.1: Added 'go mod tidy' to automatically download build dependencies.
+# Version 4.2: Adds 'go mod init' to correctly initialize the project as a Go
+#              module before compiling, fixing the 'cannot find main module' error.
 
 # --- Exit on error ---
 set -e
@@ -40,6 +41,10 @@ git clone https://github.com/gtsteffaniak/filebrowser.git /tmp/filebrowser-src >
 
 # --- Compile the binary from source ---
 cd /tmp/filebrowser-src
+echo "Initializing Go module..."
+# This command creates the go.mod file that the compiler needs.
+go mod init github.com/gtsteffaniak/filebrowser > /dev/null 2>&1
+
 echo "Downloading Go modules..."
 go mod tidy > /dev/null 2>&1
 
