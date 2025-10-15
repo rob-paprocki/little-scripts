@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This script installs Filebrowser Quantum on a Debian 13 Proxmox LXC.
-# Version 1.7: Correctly downloads the .zip archive and extracts the proper server binary.
+# Version 1.8: Made jq query more robust to handle releases with null/empty assets.
 
 # --- Exit on error ---
 set -e
@@ -34,7 +34,7 @@ done
 
 # --- Get the latest release of Filebrowser Quantum ---
 echo "Finding the latest Filebrowser release archive..."
-LATEST_RELEASE=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases" | jq -r '[.[] | select(.assets[]?.name == "linux-amd64.zip")] | .[0].assets[] | select(.name == "linux-amd64.zip") | .browser_download_url')
+LATEST_RELEASE=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases" | jq -r '[.[] | select((.assets | length > 0) and (.assets[].name == "linux-amd64.zip"))] | .[0].assets[] | select(.name == "linux-amd64.zip") | .browser_download_url')
 
 if [[ -z "$LATEST_RELEASE" || "$LATEST_RELEASE" == "null" ]]; then
     echo "❌ ERROR: Could not dynamically find a download URL for the 'linux-amd64.zip' asset."
@@ -84,7 +84,7 @@ sudo tee /usr/local/bin/update_filebrowser.sh > /dev/null <<'EOF'
 #!/bin/bash
 set -e
 echo "Checking for new Filebrowser Quantum release..."
-LATEST_RELEASE_URL=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases" | jq -r '[.[] | select(.assets[]?.name == "linux-amd64.zip")] | .[0].assets[] | select(.name == "linux-amd64.zip") | .browser_download_url')
+LATEST_RELEASE_URL=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases" | jq -r '[.[] | select((.assets | length > 0) and (.assets[].name == "linux-amd64.zip"))] | .[0].assets[] | select(.name == "linux-amd64.zip") | .browser_download_url')
 
 if [[ -z "$LATEST_RELEASE_URL" || "$LATEST_RELEASE_URL" == "null" ]]; then
     echo "Could not fetch latest release URL. Skipping update."
@@ -107,18 +107,10 @@ sudo chmod +x /usr/local/bin/update_filebrowser.sh
 
 # --- Add a cron job for daily updates ---
 echo "Adding cron job for daily updates..."
-(crabontab -l 2>/dev/null; echo "0 3 * * * /usr/local/bin/update_filebrowser.sh >/dev/null 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "0 3 * * * /usr/local/bin/update_filebrowser.sh >/dev/null 2>&1") | crontab -
 
 # --- Clean up downloaded files ---
 rm /tmp/filebrowser.zip
 
 # --- Installation complete ---
-echo ""
-echo "--------------------------------------------------------"
-echo "🎉 Filebrowser Quantum installation is complete! 🎉"
-echo ""
-echo "You can access it at: http://<your-lxc-ip>:${FILEBROWSER_PORT}"
-echo "Default login: admin / admin (Change this immediately!)"
-echo ""
-echo "A cron job for automatic updates has been created."
-echo "--------------------------------------------------------"
+echo
