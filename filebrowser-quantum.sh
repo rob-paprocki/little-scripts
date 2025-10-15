@@ -1,14 +1,13 @@
 #!/bin/bash
 
 # This script installs the Filebrowser Quantum fork by building it from source.
-# Version 4.0: Correctly handles installation by compiling the source, as no
-#              pre-built server binaries are provided in the project's releases.
+# Version 4.1: Added 'go mod tidy' to automatically download build dependencies.
 
 # --- Exit on error ---
 set -e
 
 # --- Welcome Message ---
-echo "🚀 Starting Filebrowser Quantum (Build from Source) Installation... 🚀"
+echo "🚀 Starting Filebrowser Quantum (Build from Source) Installation..."
 echo "--------------------------------------------------------"
 
 # --- Update and upgrade the system ---
@@ -35,12 +34,16 @@ done
 
 # --- Download the source code ---
 echo "Downloading Filebrowser Quantum source code..."
-# Clone into a temporary directory
+# Clean up any old source directories first
+sudo rm -rf /tmp/filebrowser-src
 git clone https://github.com/gtsteffaniak/filebrowser.git /tmp/filebrowser-src > /dev/null 2>&1
 
 # --- Compile the binary from source ---
-echo "Compiling the binary (this may take a minute)..."
 cd /tmp/filebrowser-src
+echo "Downloading Go modules..."
+go mod tidy > /dev/null 2>&1
+
+echo "Compiling the binary (this may take a minute)..."
 go build -o filebrowser . > /dev/null 2>&1
 
 # --- Install the compiled binary ---
@@ -85,7 +88,4 @@ echo "🎉 Filebrowser Quantum installation is complete! 🎉"
 echo ""
 echo "You can access it at: http://<your-lxc-ip>:${FILEBROWSER_PORT}"
 echo "Default login: admin / admin (Change this immediately!)"
-echo ""
-echo "NOTE: This was installed by compiling the source code."
-echo "Automatic updates have been disabled."
 echo "--------------------------------------------------------"
