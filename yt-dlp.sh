@@ -20,7 +20,7 @@ apt-get install -y \
     python3-pip \
     ffmpeg \
     ca-certificates \
-    aria2c \
+    aria2 \
     atomicparsley \
     build-essential \
     libcurl4-openssl-dev
