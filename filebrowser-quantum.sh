@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # This script installs Filebrowser Quantum on a Debian 13 Proxmox LXC.
-# Version 1.8: Made jq query more robust to handle releases with null/empty assets.
+# Version 1.9: Switched to jq's 'any()' function for maximum safety against null/malformed assets.
 
 # --- Exit on error ---
 set -e
 
 # --- Welcome Message ---
-echo "🚀 Starting Filebrowser Quantum Interactive Installation...🚀"
+echo "🚀 Starting Filebrowser Quantum Interactive Installation..."
 echo "--------------------------------------------------------"
 
 # --- Update and upgrade the system ---
@@ -34,7 +34,7 @@ done
 
 # --- Get the latest release of Filebrowser Quantum ---
 echo "Finding the latest Filebrowser release archive..."
-LATEST_RELEASE=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases" | jq -r '[.[] | select((.assets | length > 0) and (.assets[].name == "linux-amd64.zip"))] | .[0].assets[] | select(.name == "linux-amd64.zip") | .browser_download_url')
+LATEST_RELEASE=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases" | jq -r '[.[] | select(.assets | any(.name == "linux-amd64.zip"))] | .[0].assets[] | select(.name == "linux-amd64.zip") | .browser_download_url')
 
 if [[ -z "$LATEST_RELEASE" || "$LATEST_RELEASE" == "null" ]]; then
     echo "❌ ERROR: Could not dynamically find a download URL for the 'linux-amd64.zip' asset."
@@ -84,7 +84,7 @@ sudo tee /usr/local/bin/update_filebrowser.sh > /dev/null <<'EOF'
 #!/bin/bash
 set -e
 echo "Checking for new Filebrowser Quantum release..."
-LATEST_RELEASE_URL=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases" | jq -r '[.[] | select((.assets | length > 0) and (.assets[].name == "linux-amd64.zip"))] | .[0].assets[] | select(.name == "linux-amd64.zip") | .browser_download_url')
+LATEST_RELEASE_URL=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases" | jq -r '[.[] | select(.assets | any(.name == "linux-amd64.zip"))] | .[0].assets[] | select(.name == "linux-amd64.zip") | .browser_download_url')
 
 if [[ -z "$LATEST_RELEASE_URL" || "$LATEST_RELEASE_URL" == "null" ]]; then
     echo "Could not fetch latest release URL. Skipping update."
@@ -113,4 +113,12 @@ echo "Adding cron job for daily updates..."
 rm /tmp/filebrowser.zip
 
 # --- Installation complete ---
-echo
+echo ""
+echo "--------------------------------------------------------"
+echo "🎉 Filebrowser Quantum installation is complete! 🎉"
+echo ""
+echo "You can access it at: http://<your-lxc-ip>:${FILEBROWSER_PORT}"
+echo "Default login: admin / admin (Change this immediately!)"
+echo ""
+echo "A cron job for automatic updates has been created."
+echo "--------------------------------------------------------"
