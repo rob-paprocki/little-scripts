@@ -34,6 +34,14 @@ else
 fi
 
 # 3. Build the Binary
+log "Preparing Go module..."
+# Initialize the Go module if go.mod doesn't exist
+if [ ! -f "go.mod" ]; then
+    go mod init github.com/gtsteffaniak/filebrowser
+fi
+# Tidy ensures all dependencies are present
+go mod tidy
+
 log "Building Filebrowser binary..."
 go build -o filebrowser
 
