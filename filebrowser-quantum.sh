@@ -1,19 +1,19 @@
 #!/bin/bash
 
 # --- Configuration ---
-# This script installs File Browser from a direct binary link, sets it up
-# as a systemd service, and creates a cron job for daily updates.
-#
-# It will prompt you to enter a port number during execution.
+# This script installs File Browser, sets it up as a systemd service,
+# and creates a cron job for daily updates. It downloads the official
+# config, prompts the user for a port, and sets essential paths.
 #
 DEFAULT_PORT=8080
 DOWNLOAD_URL="https://github.com/gtsteffaniak/filebrowser/releases/latest/download/linux-amd64-filebrowser"
+CONFIG_DOWNLOAD_URL="https://raw.githubusercontent.com/gtsteffaniak/filebrowser/main/backend/config.yaml"
 
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="filebrowser"
 CONFIG_DIR="/etc/filebrowser"
 DATA_DIR="/srv"
-CONFIG_FILE="${CONFIG_DIR}/config.yml"
+CONFIG_FILE="${CONFIG_DIR}/config.yaml"
 DATABASE_FILE="${CONFIG_DIR}/filebrowser.db"
 UPDATE_SCRIPT_PATH="/usr/local/bin/update-filebrowser.sh"
 CRON_FILE_PATH="/etc/cron.d/filebrowser-updater"
@@ -31,7 +31,6 @@ echo
 
 # 1. Prompt for port and validate
 read -p "Enter the port for File Browser to run on [${DEFAULT_PORT}]: " USER_PORT
-# If the user just hits enter, use the default port.
 USER_PORT=${USER_PORT:-$DEFAULT_PORT}
 
 if ! [[ "$USER_PORT" =~ ^[0-9]+$ ]] || [ "$USER_PORT" -lt 1 ] || [ "$USER_PORT" -gt 65535 ]; then
@@ -47,49 +46,34 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# 3. Install dependencies (only curl is needed)
-echo "[INFO] Updating package list and installing dependencies (curl)..."
+# 3. Install dependencies (curl and sed)
+echo "[INFO] Updating package list and installing dependencies (curl, sed)..."
 apt-get update
-apt-get install -y curl
+apt-get install -y curl sed
 
 # 4. Create necessary directories
 echo "[INFO] Creating configuration and data directories..."
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$DATA_DIR"
 
-# 5. Create the configuration file
-echo "[INFO] Creating config file at ${CONFIG_FILE}..."
-cat << EOF > "$CONFIG_FILE"
-# This file is managed by the installation script.
-server:
-  port: ${USER_PORT}
-  baseURL: "/"
-  log: "stdout" # Systemd will handle logging
-  database: "${DATABASE_FILE}" # Specify database path
-root: "${DATA_DIR}" # Specify root directory for files
-auth:
-  method: "noauth" # Default to no auth. Change as needed.
-branding:
-  name: "My Files"
-  disableExternal: true
-userDefaults:
-  scope: "."
-  locale: "en"
-  viewMode: "mosaic"
-  singleClick: false
-  perm:
-    admin: false
-    execute: true
-    create: false
-    rename: false
-    modify: false
-    delete: false
-    share: false
-    download: true
-EOF
+# 5. Download and modify the configuration file
+echo "[INFO] Downloading default config file from ${CONFIG_DOWNLOAD_URL}..."
+if curl -L "$CONFIG_DOWNLOAD_URL" -o "$CONFIG_FILE"; then
+    echo "[INFO] Default config downloaded successfully."
+else
+    echo "[ERROR] Failed to download config file." >&2
+    exit 1
+fi
 
-echo "[INFO] Configuration file created."
-echo "[WARNING] Initial configuration is set to 'noauth'. Run 'filebrowser users add <user> <pass> --perm.admin' after install to secure it."
+echo "[INFO] Customizing configuration file..."
+# Set the user-defined port (modifying the default 'port: 80')
+sed -i "s/^port: .*/port: ${USER_PORT}/" "$CONFIG_FILE"
+# Set the absolute database path for systemd compatibility
+sed -i "s|^database: .*|database: ${DATABASE_FILE}|" "$CONFIG_FILE"
+# Set the absolute root directory path for systemd compatibility
+sed -i "s|^root: .*|root: ${DATA_DIR}|" "$CONFIG_FILE"
+
+echo "[INFO] Configuration file placed and customized at ${CONFIG_FILE}"
 
 # 6. Download and install File Browser
 echo "[INFO] Downloading latest File Browser binary from GitHub..."
@@ -116,7 +100,7 @@ else
     exit 1
 fi
 
-# 8. Create the systemd service file (Corrected ExecStart)
+# 8. Create the systemd service file
 echo "[INFO] Creating systemd service file at ${SERVICE_FILE_PATH}..."
 cat << EOF > "$SERVICE_FILE_PATH"
 [Unit]
@@ -148,34 +132,20 @@ echo "[INFO] Setting up automatic daily updates..."
 cat << EOF > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
 # This script is run by cron to update File Browser automatically.
-
-# Exit on error
 set -e
-
-# Download the latest binary to a temporary file
 TEMP_BINARY_UPDATE="/tmp/filebrowser-update"
 curl -L "${DOWNLOAD_URL}" -o "\$TEMP_BINARY_UPDATE"
-
-# Stop the service to replace the binary
 systemctl stop filebrowser.service
-
-# Replace the old binary with the new one
 install -m 755 "\$TEMP_BINARY_UPDATE" "${INSTALL_DIR}/${BINARY_NAME}"
-
-# Start the service again
 systemctl start filebrowser.service
-
-# Clean up
 rm -f "\$TEMP_BINARY_UPDATE"
-
 exit 0
 EOF
 
-# Make the update script executable
 chmod +x "$UPDATE_SCRIPT_PATH"
 echo "[INFO] Created update script at ${UPDATE_SCRIPT_PATH}"
 
-# Create the cron job file to run the script daily at 4:15 AM
+# Create the cron job file
 echo "15 4 * * * root $UPDATE_SCRIPT_PATH >/dev/null 2>&1" > "$CRON_FILE_PATH"
 chmod 644 "$CRON_FILE_PATH"
 
@@ -189,7 +159,5 @@ echo "[INFO] File Browser is running and will start on boot."
 echo "[INFO] Access it by navigating to http://<your-server-ip>:${USER_PORT} in a web browser."
 echo "[INFO] To check the status, run: sudo systemctl status filebrowser.service"
 echo "[INFO] To view logs, run: sudo journalctl -u filebrowser.service -f"
-echo "[IMPORTANT] For security, create an admin user now: ${BINARY_NAME} users add <username> <password> --perm.admin"
-echo "[IMPORTANT] Then, edit ${CONFIG_FILE} and change 'auth.method' to 'json' and restart with 'sudo systemctl restart filebrowser.service'."
 
 exit 0
