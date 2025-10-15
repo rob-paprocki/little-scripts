@@ -43,8 +43,8 @@ fi
 go mod tidy
 
 log "Building Filebrowser binary..."
-# Point the build command to the correct subdirectory
-go build -o filebrowser ./cmd/filebrowser
+# **Corrected build path to point to the ./cmd directory**
+go build -o filebrowser ./cmd
 
 # 4. Install the Binary
 log "Installing Filebrowser to $BINARY_PATH..."
