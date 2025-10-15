@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# This script installs Filebrowser Quantum on a Debian 13 Proxmox LXC
-# and sets up a daily cron job to keep it updated.
+# This script installs Filebrowser Quantum on a Debian 13 Proxmox LXC,
+# allows interactive port setting, and sets up a daily update cron job.
 
 # --- Exit on error ---
 set -e
@@ -13,6 +13,19 @@ sudo apt update && sudo apt upgrade -y
 # --- Install necessary dependencies ---
 echo "Installing dependencies..."
 sudo apt install -y curl wget
+
+# --- Interactively set the listen port ---
+FILEBROWSER_PORT=""
+while true; do
+    read -p "Enter the port for Filebrowser to listen on (e.g., 8080): " FILEBROWSER_PORT
+    # Check if input is a number and within the valid port range
+    if [[ "$FILEBROWSER_PORT" =~ ^[0-9]+$ ]] && [ "$FILEBROWSER_PORT" -gt 0 ] && [ "$FILEBROWSER_PORT" -le 65535 ]; then
+        echo "Filebrowser will be configured to use port ${FILEBROWSER_PORT}."
+        break # Exit loop if input is valid
+    else
+        echo "Invalid input. Please enter a number between 1 and 65535."
+    fi
+done
 
 # --- Get the latest release of Filebrowser Quantum ---
 echo "Downloading the latest Filebrowser Quantum release..."
@@ -31,6 +44,7 @@ sudo mkdir -p /srv/filebrowser
 
 # --- Create a systemd service for Filebrowser ---
 echo "Creating a systemd service for Filebrowser..."
+# Use the user-defined port in the ExecStart line
 sudo tee /etc/systemd/system/filebrowser.service > /dev/null <<EOF
 [Unit]
 Description=Filebrowser
@@ -39,7 +53,7 @@ After=network-online.target
 [Service]
 User=root
 Group=root
-ExecStart=/usr/local/bin/filebrowser -r /srv/filebrowser -a 0.0.0.0 -p 8080
+ExecStart=/usr/local/bin/filebrowser -r /srv/filebrowser -a 0.0.0.0 -p ${FILEBROWSER_PORT}
 Restart=on-failure
 
 [Install]
@@ -83,16 +97,14 @@ sudo chmod +x /usr/local/bin/update_filebrowser.sh
 
 # --- Add a cron job to run the update script daily ---
 echo "Adding a cron job to run the update script daily at 3:00 AM..."
-# This command safely adds the cron job without overwriting existing ones.
 (crontab -l 2>/dev/null; echo "0 3 * * * /usr/local/bin/update_filebrowser.sh") | crontab -
-
 
 # --- Clean up downloaded files ---
 echo "Cleaning up initial download..."
 rm /tmp/filebrowser.tar.gz
 
 # --- Installation complete ---
-echo "Filebrowser Quantum installation is complete!"
-echo "You can access it at http://<your-lxc-ip>:8080"
+echo "✅ Filebrowser Quantum installation is complete!"
+echo "You can access it at http://<your-lxc-ip>:${FILEBROWSER_PORT}"
 echo "Default login: admin / admin"
 echo "A cron job has been created to automatically update Filebrowser daily at 3:00 AM."
