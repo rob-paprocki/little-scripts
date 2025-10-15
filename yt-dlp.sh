@@ -1,78 +1,91 @@
 #!/bin/bash
 
-# This script performs a comprehensive installation of yt-dlp and all its
-# dependencies on Debian 13, and sets up an automatic weekly update cron job.
+# --- Configuration ---
+# Installation directory for the yt-dlp binary
+INSTALL_DIR="/usr/local/bin"
+# Name of the final executable
+BINARY_NAME="yt-dlp"
+# URL to download the latest stable yt-dlp binary
+DOWNLOAD_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
+
+# --- Script Logic ---
 
 # Exit immediately if a command exits with a non-zero status.
 set -e
+# Treat unset variables as an error when substituting.
+set -u
 
-# --- 1. Installation ---
-echo "--- Starting yt-dlp Installation ---"
+echo "--- Comprehensive yt-dlp Installer for Debian-based Systems ---"
+echo "--- Installs recommended dependencies (websocat excluded) ---"
+# Use dynamic date command for script run time
+echo "--- Script run time: $(date '+%Y-%m-%d %H:%M:%S %Z') ---"
+# Removed static location line
 
-# Update Package Lists
-echo "Updating package lists... 📦"
+# 1. Check for root privileges
+if [ "$(id -u)" -ne 0 ]; then
+   echo "[ERROR] This script must be run as root (or using sudo)." >&2
+   exit 1
+fi
+
+# 2. Update package list
+echo "[INFO] Updating package list..."
 apt-get update
 
-# Install System Dependencies
-echo "Installing system dependencies..."
+# 3. Install dependencies
+# Removed websocat from the list below
+echo "[INFO] Installing dependencies (core, metadata, crypto, python-websockets, shell completion, accelerator)..."
 apt-get install -y \
     python3 \
-    python3-pip \
     ffmpeg \
     ca-certificates \
-    aria2 \
+    curl \
     atomicparsley \
-    build-essential \
-    libcurl4-openssl-dev
+    python3-mutagen \
+    python3-pycryptodome \
+    python3-websockets \
+    bash-completion \
+    aria2
 
-# Upgrade Pip
-echo "Upgrading pip to the latest version... 🐍"
-python3 -m pip install --upgrade pip
+echo "[INFO] Core, metadata, crypto, python-websockets, shell completion, and accelerator dependencies installed."
 
-# Install Python Dependencies
-echo "Installing yt-dlp and all requested Python modules..."
-pip install \
-    yt-dlp \
-    mutagen \
-    certifi \
-    brotli \
-    websockets \
-    requests \
-    curl_cffi
+# 4. Download yt-dlp binary
+echo "[INFO] Downloading latest yt-dlp binary from GitHub..."
+# Use curl to download the file. -L follows redirects. -o specifies the output file.
+# Download to a temporary location first.
+TEMP_FILE="/tmp/${BINARY_NAME}"
+if curl -L "$DOWNLOAD_URL" -o "$TEMP_FILE"; then
+    echo "[INFO] Download successful."
+else
+    echo "[ERROR] Failed to download yt-dlp binary from $DOWNLOAD_URL" >&2
+    # Clean up temporary file if download failed partially
+    rm -f "$TEMP_FILE"
+    exit 1
+fi
 
-echo "✅ Installation complete."
+# 5. Place the binary in the installation directory
+echo "[INFO] Installing yt-dlp to ${INSTALL_DIR}/${BINARY_NAME}..."
+# Use install command which handles permissions and ownership better than mv
+# -m sets the mode (permissions)
+install -m 755 "$TEMP_FILE" "${INSTALL_DIR}/${BINARY_NAME}"
 
-# --- 2. Cron Job for Automatic Updates ---
-echo ""
-echo "--- Setting up Automatic Weekly Updates ---"
+# Clean up the temporary file
+rm -f "$TEMP_FILE"
 
-# Define the full path to python3 to ensure cron can find it
-PYTHON_PATH=$(which python3)
+echo "[INFO] yt-dlp installed."
 
-# Define the full update command
-UPDATE_COMMAND="$PYTHON_PATH -m pip install --upgrade yt-dlp mutagen certifi brotli websockets requests curl_cffi"
+# 6. Verify installation
+echo "[INFO] Verifying installation..."
+if command -v $BINARY_NAME &> /dev/null; then
+    INSTALLED_VERSION=$($BINARY_NAME --version)
+    echo "[SUCCESS] yt-dlp version ${INSTALLED_VERSION} installed successfully to ${INSTALL_DIR}/${BINARY_NAME}"
+    echo "[INFO] Dependencies for metadata, crypto, WebSockets (via python3-websockets), Bash completion, and aria2c acceleration should now be available."
+    echo "[INFO] You can now run yt-dlp using the command: ${BINARY_NAME} [OPTIONS] URL"
+    echo "[INFO] Note: Bash completion may require restarting your shell session or running 'source ~/.bashrc'."
+else
+    echo "[ERROR] yt-dlp command not found after installation. Check PATH or installation step." >&2
+    exit 1
+fi
 
-# Create a cron file in /etc/cron.d/
-CRON_FILE="/etc/cron.d/yt-dlp-update"
-echo "Creating cron job file at $CRON_FILE"
+echo "--- Installation Complete ---"
 
-# The cron job will run as root every Sunday at 3:30 AM.
-# Output is redirected to a log file for easy debugging.
-# 30 3 * * 0 = At 03:30 on Sunday
-(echo "# Automatic weekly update for yt-dlp and its dependencies."
- echo "30 3 * * 0 root $UPDATE_COMMAND > /var/log/yt-dlp-update.log 2>&1") > "$CRON_FILE"
-
-# Set the correct permissions for the cron file
-chmod 0644 "$CRON_FILE"
-
-echo "✅ Cron job created successfully."
-echo "   - It will run every Sunday at 3:30 AM."
-echo "   - To change the schedule, edit the file: $CRON_FILE"
-echo "   - Update logs will be available at: /var/log/yt-dlp-update.log"
-
-# --- 3. Final Verification ---
-echo ""
-echo "--- Verifying Installation ---"
-yt-dlp --version
-echo ""
-echo "All steps completed successfully! Your yt-dlp setup is ready and will update automatically."
+exit 0
