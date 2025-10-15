@@ -8,7 +8,7 @@
 set -e
 
 # --- Welcome Message ---
-echo "🚀 Starting Filebrowser Quantum Interactive Installation..."
+echo "🚀 Starting Filebrowser Quantum Interactive Installation... 🚀"
 echo "--------------------------------------------------------"
 
 # --- Update and upgrade the system ---
