@@ -2,6 +2,7 @@
 
 # This script installs Filebrowser Quantum on a Debian 13 Proxmox LXC,
 # allows interactive port setting, and sets up a daily update cron job.
+# Version 1.1: Added robust error handling for API calls.
 
 # --- Exit on error ---
 set -e
@@ -11,8 +12,8 @@ echo "🚀 Starting Filebrowser Quantum Interactive Installation..."
 echo "--------------------------------------------------------"
 
 # --- Update and upgrade the system ---
-echo "Updating and upgrading the system..."
-sudo apt-get update && sudo apt-get upgrade -y > /dev/null 2>&1
+echo "Updating and upgrading the system (this may take a moment)..."
+sudo apt-get update > /dev/null 2>&1 && sudo apt-get upgrade -y > /dev/null 2>&1
 echo "System updated."
 
 # --- Install necessary dependencies ---
@@ -24,10 +25,9 @@ echo "Dependencies installed."
 FILEBROWSER_PORT=""
 while true; do
     read -p "➡️ Enter the port for Filebrowser to listen on (e.g., 8080): " FILEBROWSER_PORT
-    # Check if input is a number and within the valid port range
     if [[ "$FILEBROWSER_PORT" =~ ^[0-9]+$ ]] && [ "$FILEBROWSER_PORT" -gt 0 ] && [ "$FILEBROWSER_PORT" -le 65535 ]; then
         echo "✅ Port ${FILEBROWSER_PORT} is valid."
-        break # Exit loop if input is valid
+        break
     else
         echo "❌ Invalid input. Please enter a number between 1 and 65535."
     fi
@@ -35,7 +35,20 @@ done
 
 # --- Get the latest release of Filebrowser Quantum ---
 echo "Downloading the latest Filebrowser Quantum release..."
-LATEST_RELEASE=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases/latest" | grep -Po '"browser_download_url": "\K.*linux-amd64\.tar\.gz')
+
+# The '|| true' prevents set -e from exiting if grep finds no match.
+# We then check the variable manually.
+LATEST_RELEASE=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases/latest" | grep -Po '"browser_download_url": "\K.*linux-amd64\.tar\.gz' || true)
+
+# Explicitly check if the download URL was found
+if [[ -z "${LATEST_RELEASE}" ]]; then
+    echo "❌ ERROR: Could not find the download URL for the linux-amd64 release."
+    echo "This can be caused by a network issue or GitHub API rate limiting."
+    echo "Please try again in a few minutes or check the releases page manually:"
+    echo "https://github.com/gtsteffaniak/filebrowser/releases/latest"
+    exit 1
+fi
+
 wget -qO /tmp/filebrowser.tar.gz "${LATEST_RELEASE}"
 
 # --- Extract and install Filebrowser ---
@@ -77,7 +90,12 @@ sudo tee /usr/local/bin/update_filebrowser.sh > /dev/null <<'EOF'
 #!/bin/bash
 set -e
 echo "Checking for new Filebrowser Quantum release..."
-LATEST_RELEASE_URL=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases/latest" | grep -Po '"browser_download_url": "\K.*linux-amd64\.tar\.gz')
+LATEST_RELEASE_URL=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases/latest" | grep -Po '"browser_download_url": "\K.*linux-amd64\.tar\.gz' || true)
+if [[ -z "${LATEST_RELEASE_URL}" ]]; then
+    echo "Could not fetch latest release URL. Skipping update."
+    exit 0
+fi
+
 CURRENT_VERSION=$(/usr/local/bin/filebrowser version)
 LATEST_VERSION=$(echo ${LATEST_RELEASE_URL} | grep -Po 'v[0-9]+\.[0-9]+\.[0-9]+')
 
