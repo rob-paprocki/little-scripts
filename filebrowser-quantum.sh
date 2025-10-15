@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# This script installs Filebrowser Quantum on a Debian 13 Proxmox LXC,
-# allows interactive port setting, and sets up a daily update cron job.
-# Version 1.1: Added robust error handling for API calls.
+# This script installs Filebrowser Quantum on a Debian 13 Proxmox LXC.
+# Version 1.4: Added ffmpeg as a dependency.
 
 # --- Exit on error ---
 set -e
@@ -17,8 +16,8 @@ sudo apt-get update > /dev/null 2>&1 && sudo apt-get upgrade -y > /dev/null 2>&1
 echo "System updated."
 
 # --- Install necessary dependencies ---
-echo "Installing dependencies (curl, wget)..."
-sudo apt-get install -y curl wget > /dev/null 2>&1
+echo "Installing dependencies (curl, wget, ffmpeg)..."
+sudo apt-get install -y curl wget ffmpeg > /dev/null 2>&1
 echo "Dependencies installed."
 
 # --- Interactively set the listen port ---
@@ -34,27 +33,23 @@ while true; do
 done
 
 # --- Get the latest release of Filebrowser Quantum ---
-echo "Downloading the latest Filebrowser Quantum release..."
+echo "Finding the latest Filebrowser Quantum release..."
 
-# The '|| true' prevents set -e from exiting if grep finds no match.
-# We then check the variable manually.
-LATEST_RELEASE=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases/latest" | grep -Po '"browser_download_url": "\K.*linux-amd64\.tar\.gz' || true)
+# Look for the raw binary file, anchored to the end of the line
+LATEST_RELEASE=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases/latest" | grep -Po '"browser_download_url": "\K.*linux-amd64-filebrowser$' || true)
 
-# Explicitly check if the download URL was found
 if [[ -z "${LATEST_RELEASE}" ]]; then
-    echo "❌ ERROR: Could not find the download URL for the linux-amd64 release."
-    echo "This can be caused by a network issue or GitHub API rate limiting."
-    echo "Please try again in a few minutes or check the releases page manually:"
-    echo "https://github.com/gtsteffaniak/filebrowser/releases/latest"
+    echo "❌ ERROR: Could not find the download URL for the 'linux-amd64-filebrowser' release asset."
+    echo "This can be caused by a network issue, GitHub API rate limiting, or a change in release assets."
+    echo "Please check the releases page manually: https://github.com/gtsteffaniak/filebrowser/releases/latest"
     exit 1
 fi
 
-wget -qO /tmp/filebrowser.tar.gz "${LATEST_RELEASE}"
+echo "Downloading and installing Filebrowser binary..."
+# Download the binary directly to its final destination
+sudo wget -qO /usr/local/bin/filebrowser "${LATEST_RELEASE}"
 
-# --- Extract and install Filebrowser ---
-echo "Installing Filebrowser Quantum..."
-tar -xf /tmp/filebrowser.tar.gz -C /tmp/
-sudo mv /tmp/filebrowser /usr/local/bin/
+# Make the binary executable
 sudo chmod +x /usr/local/bin/filebrowser
 
 # --- Create a directory for Filebrowser data ---
@@ -90,7 +85,7 @@ sudo tee /usr/local/bin/update_filebrowser.sh > /dev/null <<'EOF'
 #!/bin/bash
 set -e
 echo "Checking for new Filebrowser Quantum release..."
-LATEST_RELEASE_URL=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases/latest" | grep -Po '"browser_download_url": "\K.*linux-amd64\.tar\.gz' || true)
+LATEST_RELEASE_URL=$(curl -s "https://api.github.com/repos/gtsteffaniak/filebrowser/releases/latest" | grep -Po '"browser_download_url": "\K.*linux-amd64-filebrowser$' || true)
 if [[ -z "${LATEST_RELEASE_URL}" ]]; then
     echo "Could not fetch latest release URL. Skipping update."
     exit 0
@@ -105,13 +100,11 @@ if [[ "v${CURRENT_VERSION}" == "${LATEST_VERSION}" ]]; then
 fi
 
 echo "New version ${LATEST_VERSION} found. Updating from ${CURRENT_VERSION}..."
-wget -q -O /tmp/filebrowser.tar.gz "${LATEST_RELEASE_URL}"
+wget -qO /tmp/filebrowser.new "${LATEST_RELEASE_URL}"
 systemctl stop filebrowser.service
-tar -xf /tmp/filebrowser.tar.gz -C /tmp/
-mv /tmp/filebrowser /usr/local/bin/
+mv /tmp/filebrowser.new /usr/local/bin/filebrowser
 chmod +x /usr/local/bin/filebrowser
 systemctl start filebrowser.service
-rm /tmp/filebrowser.tar.gz
 echo "Filebrowser successfully updated to ${LATEST_VERSION}."
 EOF
 
@@ -121,9 +114,6 @@ sudo chmod +x /usr/local/bin/update_filebrowser.sh
 # --- Add a cron job to run the update script daily ---
 echo "Adding cron job for daily updates..."
 (crontab -l 2>/dev/null; echo "0 3 * * * /usr/local/bin/update_filebrowser.sh >/dev/null 2>&1") | crontab -
-
-# --- Clean up downloaded files ---
-rm /tmp/filebrowser.tar.gz
 
 # --- Installation complete ---
 echo ""
