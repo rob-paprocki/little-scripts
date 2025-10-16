@@ -11,8 +11,6 @@ DOWNLOAD_URL="https://github.com/gtsteffaniak/filebrowser/releases/latest/downlo
 CONFIG_DIR="/etc/filebrowser"
 # Path to the main config file
 CONFIG_FILE_PATH="${CONFIG_DIR}/config.yaml"
-# Database file path
-DATABASE_PATH="${CONFIG_DIR}/filebrowser.db"
 # Systemd service file path
 SYSTEMD_SERVICE_FILE="/etc/systemd/system/filebrowser.service"
 # Path for the separate update script
@@ -22,13 +20,10 @@ CRON_FILE_PATH="/etc/cron.d/filebrowser-updater"
 
 # --- Script Logic ---
 
-# Exit immediately if a command exits with a non-zero status.
 set -e
-# Treat unset variables as an error when substituting.
 set -u
 
 echo "--- File Browser Installer & Updater (Root Mode) ---"
-echo "--- This script will install and run all components as the root user. ---"
 
 # 1. Check for root privileges
 if [ "$(id -u)" -ne 0 ]; then
@@ -40,24 +35,20 @@ fi
 FB_PORT=""
 while true; do
     read -p "Enter the port for File Browser [8080]: " FB_PORT
-    
-    # If the user just hits Enter, use the default value.
     if [ -z "$FB_PORT" ]; then
         FB_PORT="8080"
     fi
-
     if [[ "$FB_PORT" =~ ^[0-9]+$ ]] && [ "$FB_PORT" -ge 1 ] && [ "$FB_PORT" -le 65535 ]; then
         echo "[INFO] File Browser will be configured to run on port ${FB_PORT}."
         break
     else
         echo "[ERROR] Invalid input. Please enter a number between 1 and 65535." >&2
-        FB_PORT="" # Reset for the loop
+        FB_PORT=""
     fi
 done
 
 # 3. Prompt for Discord Webhook URL (Optional)
 DISCORD_WEBHOOK_URL=""
-echo "You can optionally receive a Discord notification when the update completes."
 read -p "Enter your Discord webhook URL (or press Enter to skip): " DISCORD_WEBHOOK_URL
 if [ -n "$DISCORD_WEBHOOK_URL" ]; then
     echo "[INFO] Discord notifications will be sent upon update."
@@ -74,7 +65,7 @@ apt-get install -y curl
 echo "[INFO] Creating directory: ${CONFIG_DIR}"
 mkdir -p "$CONFIG_DIR"
 
-# 6. Create the configuration file using the user-provided port
+# 6. Create the configuration file
 echo "[INFO] Creating configuration file at ${CONFIG_FILE_PATH}..."
 cat << EOF > "$CONFIG_FILE_PATH"
 server:
@@ -106,22 +97,20 @@ echo "[SUCCESS] Configuration file created."
 echo "[INFO] Downloading latest File Browser binary from GitHub..."
 TEMP_FILE="/tmp/filebrowser-bin"
 curl -L "$DOWNLOAD_URL" -o "$TEMP_FILE"
-
 echo "[INFO] Installing binary to ${INSTALL_DIR}/${BINARY_NAME}..."
 install -m 755 "$TEMP_FILE" "${INSTALL_DIR}/${BINARY_NAME}"
 rm -f "$TEMP_FILE"
 
 # 8. Verify installation
-echo "[INFO] Verifying installation..."
 if command -v $BINARY_NAME &> /dev/null; then
     INSTALLED_VERSION=$($BINARY_NAME version)
     echo "[SUCCESS] File Browser ${INSTALLED_VERSION} installed successfully."
 else
-    echo "[ERROR] filebrowser command not found after installation. Check PATH or installation step." >&2
+    echo "[ERROR] filebrowser command not found after installation." >&2
     exit 1
 fi
 
-# 9. Create the systemd service file to run as root
+# 9. Create the systemd service file (Corrected ExecStart line)
 echo "[INFO] Creating systemd service file at ${SYSTEMD_SERVICE_FILE}..."
 cat << EOF > "$SYSTEMD_SERVICE_FILE"
 [Unit]
@@ -129,14 +118,13 @@ Description=File Browser
 After=network.target
 
 [Service]
-# No User or Group specified, so this will run as root
-ExecStart=${INSTALL_DIR}/filebrowser -c ${CONFIG_FILE_PATH} -d ${DATABASE_PATH}
+ExecStart=${INSTALL_DIR}/filebrowser -c ${CONFIG_FILE_PATH}
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 EOF
-echo "[SUCCESS] Systemd service file created to run as root."
+echo "[SUCCESS] Systemd service file created."
 
 # 10. Enable and start the File Browser service
 echo "[INFO] Enabling and starting the File Browser service..."
@@ -147,53 +135,31 @@ echo "[SUCCESS] Service enabled and started."
 
 # 11. Setup Automatic Daily Updates
 echo "[INFO] Setting up automatic daily updates..."
-
-# Create the dedicated update script
 cat << EOF > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
-# This script is run by cron to update filebrowser automatically.
-
 set -e
-
-# --- Configuration ---
 TEMP_FILE="/tmp/filebrowser-update"
 DOWNLOAD_URL="https://github.com/gtsteffaniak/filebrowser/releases/latest/download/linux-amd64-filebrowser"
-DISCORD_WEBHOOK_URL="${DISCORD_WEBHOOK_URL}" # The user's URL is injected here
-
-# --- Logic ---
-echo "Downloading latest File Browser..."
+DISCORD_WEBHOOK_URL="${DISCORD_WEBHOOK_URL}"
 curl -L "\$DOWNLOAD_URL" -o "\$TEMP_FILE"
-
-echo "Updating binary..."
 systemctl stop filebrowser.service
 install -m 755 "\$TEMP_FILE" "/usr/local/bin/filebrowser"
 systemctl start filebrowser.service
-
 rm -f "\$TEMP_FILE"
-echo "File Browser update complete."
-
-# Send Discord notification if the URL was provided
 if [ -n "\$DISCORD_WEBHOOK_URL" ]; then
     HOSTNAME=\$(hostname)
     MESSAGE="✅ File Browser on server '\${HOSTNAME}' was successfully updated."
     JSON_PAYLOAD="{\\"content\\": \\"\${MESSAGE}\\"}"
-
-    echo "Sending Discord notification..."
     curl -H "Content-Type: application/json" -X POST -d "\$JSON_PAYLOAD" "\$DISCORD_WEBHOOK_URL"
 fi
-
 exit 0
 EOF
-
-# Make the update script executable
 chmod +x "$UPDATE_SCRIPT_PATH"
 echo "[INFO] Created update script at ${UPDATE_SCRIPT_PATH}"
 
 # Create the cron job file to run the script daily at 8:15 PM
 echo "15 20 * * * root $UPDATE_SCRIPT_PATH >/dev/null 2>&1" > "$CRON_FILE_PATH"
-
-echo "[SUCCESS] Cron job created at ${CRON_FILE_PATH}"
-echo "[INFO] File Browser will now be updated automatically every day at 8:15 PM."
+echo "[SUCCESS] Cron job created to run daily at 8:15 PM."
 
 # --- Final Instructions ---
 echo
@@ -201,7 +167,6 @@ echo "--- Installation and Auto-Update Setup Complete ---"
 echo "✅ File Browser is now running as the ROOT user!"
 echo "   - Access it at: http://<your-server-ip>:${FB_PORT}"
 echo "   - Config file:  ${CONFIG_FILE_PATH}"
-echo "   - Database:     ${DATABASE_PATH}"
+echo "   - Database will be at: ${CONFIG_DIR}/filebrowser.db"
 echo "   - To check status: sudo systemctl status filebrowser.service"
-echo "   - To see logs:   sudo journalctl -u filebrowser.service"
 echo
