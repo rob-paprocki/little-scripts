@@ -1,24 +1,12 @@
 #!/bin/bash
 
 # --- Configuration ---
-# Installation directory for the yt-dlp binary
 INSTALL_DIR="/usr/local/bin"
-# Name of the final executable
 BINARY_NAME="yt-dlp"
-# URL to download the latest stable yt-dlp binary
 DOWNLOAD_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
-# Path for the separate update script
 UPDATE_SCRIPT_PATH="/usr/local/bin/update-yt-dlp.sh"
-# Path for the cron job file
 CRON_FILE_PATH="/etc/cron.d/yt-dlp-updater"
-# Path for the update log file
 LOG_FILE="/var/log/yt-dlp-update.log"
-
-# --- [NEW] Discord Configuration ---
-# PASTE YOUR DISCORD WEBHOOK URL HERE
-# If you leave this as the default, notifications will be skipped.
-# To get a URL: Server Settings > Integrations > Webhooks > New Webhook
-DISCORD_WEBHOOK_URL="YOUR_WEBHOOK_URL_HERE"
 
 # --- Script Logic ---
 
@@ -37,17 +25,28 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# [NEW] Check if Discord Webhook is configured
-if [ "$DISCORD_WEBHOOK_URL" == "YOUR_WEBHOOK_URL_HERE" ]; then
-    echo "[WARNING] Discord webhook URL is not configured. Update notifications will be skipped."
-    echo "[INFO] To enable notifications, edit this script and replace 'YOUR_WEBHOOK_URL_HERE' with your actual webhook URL."
-fi
+# 2. [NEW] Prompt user for Discord Webhook URL
+echo
+echo "[CONFIG] To receive notifications when yt-dlp is updated, you can provide a Discord webhook URL."
+echo "[INFO] How to get a URL: In your Discord server, go to Server Settings > Integrations > Webhooks > New Webhook."
+# Use 'read -p' to prompt the user and store input in the DISCORD_WEBHOOK_URL variable
+read -p "Enter your Discord Webhook URL (or press Enter to skip): " DISCORD_WEBHOOK_URL
 
-# 2. Update package list
+# Check if the user provided a URL or skipped
+if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+    echo "[INFO] No webhook URL provided. Discord notifications will be disabled."
+    # Set to an empty string to ensure the update script handles it correctly
+    DISCORD_WEBHOOK_URL="" 
+else
+    echo "[SUCCESS] Discord webhook URL received. Notifications will be enabled."
+fi
+echo
+
+# 3. Update package list
 echo "[INFO] Updating package list..."
 apt-get update
 
-# 3. Install dependencies
+# 4. Install dependencies
 echo "[INFO] Installing dependencies (core, metadata, crypto, python-websockets, shell completion, accelerator)..."
 apt-get install -y \
     python3 \
@@ -63,7 +62,7 @@ apt-get install -y \
 
 echo "[INFO] Dependencies installed."
 
-# 4. Download yt-dlp binary
+# 5. Download yt-dlp binary
 echo "[INFO] Downloading latest yt-dlp binary from GitHub..."
 TEMP_FILE="/tmp/${BINARY_NAME}"
 if curl -L "$DOWNLOAD_URL" -o "$TEMP_FILE"; then
@@ -74,13 +73,13 @@ else
     exit 1
 fi
 
-# 5. Place the binary in the installation directory
+# 6. Place the binary in the installation directory
 echo "[INFO] Installing yt-dlp to ${INSTALL_DIR}/${BINARY_NAME}..."
 install -m 755 "$TEMP_FILE" "${INSTALL_DIR}/${BINARY_NAME}"
 rm -f "$TEMP_FILE"
 echo "[INFO] yt-dlp installed."
 
-# 6. Verify installation
+# 7. Verify installation
 echo "[INFO] Verifying installation..."
 if command -v $BINARY_NAME &> /dev/null; then
     INSTALLED_VERSION=$($BINARY_NAME --version)
@@ -90,10 +89,11 @@ else
     exit 1
 fi
 
-# 7. Setup Automatic Daily Updates
+# 8. Setup Automatic Daily Updates
 echo "[INFO] Setting up automatic daily updates..."
 
 # [ENHANCED] Create the dedicated update script with Discord notification logic
+# The ${DISCORD_WEBHOOK_URL} variable from the prompt is passed directly into the script here.
 cat << EOF > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
 # This script is run by cron to update yt-dlp automatically.
@@ -108,14 +108,13 @@ INSTALL_PATH="/usr/local/bin/yt-dlp"
 # --- Function to send Discord notification ---
 send_discord_notification() {
     local message="\$1"
-    # Skip if webhook is not configured
-    if [ -z "\$DISCORD_WEBHOOK_URL" ] || [ "\$DISCORD_WEBHOOK_URL" == "YOUR_WEBHOOK_URL_HERE" ]; then
+    # Skip if webhook is not configured (is an empty string)
+    if [ -z "\$DISCORD_WEBHOOK_URL" ]; then
         echo "Discord webhook URL not configured. Skipping notification."
         return
     fi
     
     # Construct a simple JSON payload with a formatted message
-    # The \\" are to escape quotes for the JSON string
     JSON_PAYLOAD="{\\"content\\": null, \\"embeds\\": [{\\"title\\": \\"yt-dlp Auto-Update Status\\",\\"description\\": \\"\$message\\",\\"color\\": 5814783, \\"author\\": {\\"name\\": \\"Cron Job on \$(hostname)\\"}}], \\"username\\": \\"yt-dlp Updater\\", \\"avatar_url\\": \\"https://i.imgur.com/tH31Yxt.png\\"}"
     
     # Send notification using curl
@@ -169,8 +168,7 @@ EOF
 chmod +x "$UPDATE_SCRIPT_PATH"
 echo "[INFO] Created update script at ${UPDATE_SCRIPT_PATH}"
 
-# [ENHANCED] Create the cron job file to run the script at 8:30 PM (20:30)
-# Output is now logged to LOG_FILE for troubleshooting.
+# Create the cron job file to run the script at 8:30 PM (20:30)
 echo "30 20 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
 
 echo "[SUCCESS] Cron job created at ${CRON_FILE_PATH}"
