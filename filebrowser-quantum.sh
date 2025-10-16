@@ -135,42 +135,75 @@ systemctl enable filebrowser.service
 systemctl start filebrowser.service
 echo "[SUCCESS] Service enabled and started."
 
-# 11. Setup Automatic Daily Updates with Improved Error Handling
+# 11. Setup Automatic Daily Updates with a Robust Method
 echo "[INFO] Setting up automatic daily updates..."
-cat << EOF > "$UPDATE_SCRIPT_PATH"
+
+# Use a 'here document' with a quoted delimiter to prevent shell expansion.
+# This makes the script much cleaner and less prone to escaping errors.
+cat << 'EOF' > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
 set -e
+set -u
+
+# --- Configuration ---
 TEMP_FILE="/tmp/filebrowser-update"
 DOWNLOAD_URL="https://github.com/gtsteffaniak/filebrowser/releases/latest/download/linux-amd64-filebrowser"
-DISCORD_WEBHOOK_URL="${DISCORD_WEBHOOK_URL}"
-echo "--- File Browser Update Started: \$(date) ---"
+INSTALL_PATH="/usr/local/bin/filebrowser"
+SERVICE_NAME="filebrowser.service"
+# This URL is a placeholder that will be replaced by the installer script.
+DISCORD_WEBHOOK_URL="##DISCORD_WEBHOOK_URL_PLACEHOLDER##"
+
+# --- Logic ---
+echo "--- File Browser Update Started: $(date) ---"
+
 echo "Downloading latest File Browser..."
 # Use --fail to ensure curl exits with an error on HTTP failures (like 404)
 # Use -sS for silent output on success, but show errors.
-curl -sS --fail -L "\$DOWNLOAD_URL" -o "\$TEMP_FILE"
-# Add a check to ensure the file was downloaded and is not empty
-if [ ! -s "\$TEMP_FILE" ]; then
-    echo "Error: Download failed or the downloaded file is empty. Aborting update." >&2
-    rm -f "\$TEMP_FILE" # Clean up potentially empty file
+if ! curl -sS --fail -L "$DOWNLOAD_URL" -o "$TEMP_FILE"; then
+    echo "Error: Download failed from $DOWNLOAD_URL. Aborting update." >&2
+    # Clean up the temp file if it was created
+    rm -f "$TEMP_FILE"
     exit 1
 fi
-echo "Updating binary..."
-systemctl stop filebrowser.service
-install -m 755 "\$TEMP_FILE" "/usr/local/bin/filebrowser"
-systemctl start filebrowser.service
-rm -f "\$TEMP_FILE"
-echo "File Browser update complete."
-if [ -n "\$DISCORD_WEBHOOK_URL" ]; then
-    HOSTNAME=\$(hostname)
-    MESSAGE="✅ File Browser on server '\${HOSTNAME}' was successfully updated."
-    JSON_PAYLOAD="{\\"content\\": \\"\${MESSAGE}\\"}"
-    echo "Sending Discord notification..."
-    curl -H "Content-Type: application/json" -X POST -d "\$JSON_PAYLOAD" "\$DISCORD_WEBHOOK_URL"
+
+# Add a check to ensure the downloaded file is not empty
+if [ ! -s "$TEMP_FILE" ]; then
+    echo "Error: Downloaded file is empty. Aborting update." >&2
+    rm -f "$TEMP_FILE" # Clean up empty file
+    exit 1
 fi
+
+echo "Updating binary..."
+systemctl stop "$SERVICE_NAME"
+install -m 755 "$TEMP_FILE" "$INSTALL_PATH"
+systemctl start "$SERVICE_NAME"
+
+# Clean up the downloaded file
+rm -f "$TEMP_FILE"
+
+INSTALLED_VERSION=$($INSTALL_PATH version)
+echo "File Browser update complete. Now running: ${INSTALLED_VERSION}"
+
+# Send Discord notification if the URL was provided
+if [[ -n "$DISCORD_WEBHOOK_URL" && "$DISCORD_WEBHOOK_URL" != "##DISCORD_WEBHOOK_URL_PLACEHOLDER##" ]]; then
+    HOSTNAME=$(hostname)
+    MESSAGE="✅ File Browser on server '${HOSTNAME}' was successfully updated to ${INSTALLED_VERSION}."
+    # Properly format the JSON payload
+    JSON_PAYLOAD=$(printf '{"content": "%s"}' "$MESSAGE")
+    
+    echo "Sending Discord notification..."
+    curl -H "Content-Type: application/json" -X POST -d "$JSON_PAYLOAD" "$DISCORD_WEBHOOK_URL"
+fi
+
 echo "--- Update Finished ---"
 echo ""
 exit 0
 EOF
+
+# Use sed to safely replace the placeholder with the actual webhook URL.
+# Using '|' as a separator avoids issues if the URL contains slashes '/'.
+sed -i "s|##DISCORD_WEBHOOK_URL_PLACEHOLDER##|${DISCORD_WEBHOOK_URL}|g" "$UPDATE_SCRIPT_PATH"
+
 chmod +x "$UPDATE_SCRIPT_PATH"
 echo "[INFO] Created update script at ${UPDATE_SCRIPT_PATH}"
 
