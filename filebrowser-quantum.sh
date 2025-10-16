@@ -221,4 +221,3 @@ echo "   - Config file:  ${CONFIG_FILE_PATH}"
 echo "   - Database will be at: ${CONFIG_DIR}/filebrowser.db"
 echo "   - To check status: sudo systemctl status filebrowser.service"
 echo "   - Update logs are at: ${LOG_FILE}"
-echo
