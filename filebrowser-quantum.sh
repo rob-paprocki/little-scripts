@@ -139,7 +139,6 @@ echo "[SUCCESS] Service enabled and started."
 echo "[INFO] Setting up automatic daily updates..."
 
 # Use a 'here document' with a quoted delimiter to prevent shell expansion.
-# This makes the script much cleaner and less prone to escaping errors.
 cat << 'EOF' > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
 set -e
@@ -158,19 +157,15 @@ DISCORD_WEBHOOK_URL="##DISCORD_WEBHOOK_URL_PLACEHOLDER##"
 echo "--- File Browser Update Started: $(date) ---"
 
 echo "Downloading latest File Browser..."
-# Use --fail to ensure curl exits with an error on HTTP failures (like 404)
-# Use -sS for silent output on success, but show errors.
 if ! curl -sS --fail -L "$DOWNLOAD_URL" -o "$TEMP_FILE"; then
     echo "Error: Download failed from $DOWNLOAD_URL. Aborting update." >&2
-    # Clean up the temp file if it was created
     rm -f "$TEMP_FILE"
     exit 1
 fi
 
-# Add a check to ensure the downloaded file is not empty
 if [ ! -s "$TEMP_FILE" ]; then
     echo "Error: Downloaded file is empty. Aborting update." >&2
-    rm -f "$TEMP_FILE" # Clean up empty file
+    rm -f "$TEMP_FILE"
     exit 1
 fi
 
@@ -178,8 +173,6 @@ echo "Updating binary..."
 systemctl stop "$SERVICE_NAME"
 install -m 755 "$TEMP_FILE" "$INSTALL_PATH"
 systemctl start "$SERVICE_NAME"
-
-# Clean up the downloaded file
 rm -f "$TEMP_FILE"
 
 INSTALLED_VERSION=$($INSTALL_PATH version)
@@ -189,11 +182,23 @@ echo "File Browser update complete. Now running: ${INSTALLED_VERSION}"
 if [[ -n "$DISCORD_WEBHOOK_URL" && "$DISCORD_WEBHOOK_URL" != "##DISCORD_WEBHOOK_URL_PLACEHOLDER##" ]]; then
     HOSTNAME=$(hostname)
     MESSAGE="✅ File Browser on server '${HOSTNAME}' was successfully updated to ${INSTALLED_VERSION}."
-    # Properly format the JSON payload
     JSON_PAYLOAD=$(printf '{"content": "%s"}' "$MESSAGE")
     
     echo "Sending Discord notification..."
-    curl -H "Content-Type: application/json" -X POST -d "$JSON_PAYLOAD" "$DISCORD_WEBHOOK_URL"
+    # Send notification and capture the HTTP status code from Discord's server.
+    HTTP_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+        -H "Content-Type: application/json" \
+        -X POST \
+        -d "$JSON_PAYLOAD" \
+        "$DISCORD_WEBHOOK_URL")
+
+    # Check if the notification was successful. Discord returns 204 on success.
+    if [ "$HTTP_STATUS" -eq 204 ]; then
+        echo "Discord notification sent successfully (HTTP Status: $HTTP_STATUS)."
+    else
+        echo "Error: Failed to send Discord notification. Received HTTP Status: $HTTP_STATUS." >&2
+        echo "Please check your webhook URL and network connectivity." >&2
+    fi
 fi
 
 echo "--- Update Finished ---"
@@ -202,15 +207,14 @@ exit 0
 EOF
 
 # Use sed to safely replace the placeholder with the actual webhook URL.
-# Using '|' as a separator avoids issues if the URL contains slashes '/'.
 sed -i "s|##DISCORD_WEBHOOK_URL_PLACEHOLDER##|${DISCORD_WEBHOOK_URL}|g" "$UPDATE_SCRIPT_PATH"
 
 chmod +x "$UPDATE_SCRIPT_PATH"
 echo "[INFO] Created update script at ${UPDATE_SCRIPT_PATH}"
 
-# Create the cron job file to run the script daily at 8:15 PM and log output
-echo "25 21 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
-echo "[SUCCESS] Cron job created to run daily at 9:25 PM."
+# Create the cron job file to run the script daily at 9:30 PM and log output
+echo "30 21 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
+echo "[SUCCESS] Cron job created to run daily at 9:30 PM."
 echo "[INFO] Update results will be logged to ${LOG_FILE}"
 
 # --- Final Instructions ---
