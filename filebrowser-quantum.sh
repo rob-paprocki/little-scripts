@@ -105,7 +105,7 @@ rm -f "$TEMP_FILE"
 
 # 8. Verify installation
 if command -v $BINARY_NAME &> /dev/null; then
-    INSTALLED_VERSION=$($BINARY_NAME version)
+    INSTALLED_VERSION=$($BINARY_NAME version | grep 'Version' | awk '{print $3}')
     echo "[SUCCESS] File Browser ${INSTALLED_VERSION} installed successfully."
 else
     echo "[ERROR] filebrowser command not found after installation." >&2
@@ -175,7 +175,8 @@ install -m 755 "$TEMP_FILE" "$INSTALL_PATH"
 systemctl start "$SERVICE_NAME"
 rm -f "$TEMP_FILE"
 
-INSTALLED_VERSION=$($INSTALL_PATH version)
+# Get only the clean version string (e.g., v0.8.8-beta) to avoid breaking the JSON payload.
+INSTALLED_VERSION=$($INSTALL_PATH version | grep 'Version' | awk '{print $3}')
 echo "File Browser update complete. Now running: ${INSTALLED_VERSION}"
 
 # Send Discord notification if the URL was provided
