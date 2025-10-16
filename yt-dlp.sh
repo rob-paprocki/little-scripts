@@ -25,18 +25,15 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# 2. [NEW] Prompt user for Discord Webhook URL
+# 2. Prompt user for Discord Webhook URL
 echo
 echo "[CONFIG] To receive notifications when yt-dlp is updated, you can provide a Discord webhook URL."
 echo "[INFO] How to get a URL: In your Discord server, go to Server Settings > Integrations > Webhooks > New Webhook."
-# Use 'read -p' to prompt the user and store input in the DISCORD_WEBHOOK_URL variable
 read -p "Enter your Discord Webhook URL (or press Enter to skip): " DISCORD_WEBHOOK_URL
 
-# Check if the user provided a URL or skipped
 if [ -z "$DISCORD_WEBHOOK_URL" ]; then
     echo "[INFO] No webhook URL provided. Discord notifications will be disabled."
-    # Set to an empty string to ensure the update script handles it correctly
-    DISCORD_WEBHOOK_URL="" 
+    DISCORD_WEBHOOK_URL=""
 else
     echo "[SUCCESS] Discord webhook URL received. Notifications will be enabled."
 fi
@@ -47,7 +44,7 @@ echo "[INFO] Updating package list..."
 apt-get update
 
 # 4. Install dependencies
-echo "[INFO] Installing dependencies (core, metadata, crypto, python-websockets, shell completion, accelerator)..."
+echo "[INFO] Installing dependencies..."
 apt-get install -y \
     python3 \
     ffmpeg \
@@ -92,13 +89,11 @@ fi
 # 8. Setup Automatic Daily Updates
 echo "[INFO] Setting up automatic daily updates..."
 
-# [ENHANCED] Create the dedicated update script with Discord notification logic
-# The ${DISCORD_WEBHOOK_URL} variable from the prompt is passed directly into the script here.
+# [ENHANCED] Create the dedicated update script with notifications for all successful runs
 cat << EOF > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
 # This script is run by cron to update yt-dlp automatically.
 
-# Exit on error, treat unset variables as error
 set -eu
 
 # --- Configuration ---
@@ -108,56 +103,54 @@ INSTALL_PATH="/usr/local/bin/yt-dlp"
 # --- Function to send Discord notification ---
 send_discord_notification() {
     local message="\$1"
-    # Skip if webhook is not configured (is an empty string)
+    local color="\$2" # Added color parameter
+
     if [ -z "\$DISCORD_WEBHOOK_URL" ]; then
         echo "Discord webhook URL not configured. Skipping notification."
         return
     fi
     
-    # Construct a simple JSON payload with a formatted message
-    JSON_PAYLOAD="{\\"content\\": null, \\"embeds\\": [{\\"title\\": \\"yt-dlp Auto-Update Status\\",\\"description\\": \\"\$message\\",\\"color\\": 5814783, \\"author\\": {\\"name\\": \\"Cron Job on \$(hostname)\\"}}], \\"username\\": \\"yt-dlp Updater\\", \\"avatar_url\\": \\"https://i.imgur.com/tH31Yxt.png\\"}"
+    JSON_PAYLOAD="{\\"content\\": null, \\"embeds\\": [{\\"title\\": \\"yt-dlp Auto-Update Status\\",\\"description\\": \\"\$message\\",\\"color\\": \$color, \\"author\\": {\\"name\\": \\"Cron Job on \$(hostname)\\"}}], \\"username\\": \\"yt-dlp Updater\\", \\"avatar_url\\": \\"https://i.imgur.com/tH31Yxt.png\\"}"
     
-    # Send notification using curl
     curl --silent --show-error -H "Content-Type: application/json" -X POST -d "\$JSON_PAYLOAD" "\$DISCORD_WEBHOOK_URL" || echo "[ERROR] Failed to send Discord notification."
 }
 
 # --- Main Update Logic ---
 echo "--- Starting yt-dlp update check: \$(date) ---"
 
-# Get current version before attempting update
 if ! command -v \$INSTALL_PATH &> /dev/null; then
     echo "[ERROR] yt-dlp not found at \$INSTALL_PATH. Cannot update."
-    send_discord_notification "🚨 **Update Failed!**\n\`yt-dlp\` not found at \$INSTALL_PATH."
+    send_discord_notification "🚨 **Update Failed!**\n\`yt-dlp\` not found at \$INSTALL_PATH." 15728640 # Red color
     exit 1
 fi
 OLD_VERSION=\$("\$INSTALL_PATH" --version)
 echo "Current version: \$OLD_VERSION"
 
-# Download the latest yt-dlp to a temporary file
 TEMP_FILE="/tmp/yt-dlp-update.\$\$"
 echo "Downloading latest version..."
 if ! curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" -o "\$TEMP_FILE"; then
     echo "[ERROR] Download failed."
     rm -f "\$TEMP_FILE"
-    send_discord_notification "🚨 **Update Failed!**\nCould not download the latest binary from GitHub."
+    send_discord_notification "🚨 **Update Failed!**\nCould not download the latest binary from GitHub." 15728640 # Red color
     exit 1
 fi
 
-# Replace the old binary with the new one
 install -m 755 "\$TEMP_FILE" "\$INSTALL_PATH"
 rm -f "\$TEMP_FILE"
 
-# Get new version after update
 NEW_VERSION=\$("\$INSTALL_PATH" --version)
 echo "New version: \$NEW_VERSION"
 
-# Compare versions and send notification ONLY if it changed
+# [MODIFIED LOGIC] Send a notification regardless of update status
 if [ "\$OLD_VERSION" != "\$NEW_VERSION" ]; then
     echo "Update successful: \$OLD_VERSION -> \$NEW_VERSION"
     MESSAGE="✅ **yt-dlp was updated successfully!**\n\n**Host:** \`\$(hostname)\`\n**Old Version:** \`\$OLD_VERSION\`\n**New Version:** \`\$NEW_VERSION\`"
-    send_discord_notification "\$MESSAGE"
+    send_discord_notification "\$MESSAGE" 5814783 # Green color
 else
     echo "yt-dlp is already up to date (version \$OLD_VERSION)."
+    # [NEW] Send a success notification even if no update was needed
+    MESSAGE="✔️ **yt-dlp update check complete.**\n\n**Host:** \`\$(hostname)\`\n**Status:** Already up-to-date\n**Current Version:** \`\$OLD_VERSION\`"
+    send_discord_notification "\$MESSAGE" 3447003 # Blue color
 fi
 
 echo "--- Update check finished ---"
@@ -176,6 +169,5 @@ echo "[INFO] yt-dlp will now be updated automatically every day at 8:30 PM."
 echo "[INFO] Update logs will be stored in ${LOG_FILE}"
 
 echo "--- Installation and Auto-Update Setup Complete ---"
-echo "[INFO] You can now run yt-dlp using the command: ${BINARY_NAME} [OPTIONS] URL"
 
 exit 0
