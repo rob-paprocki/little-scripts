@@ -17,6 +17,8 @@ SYSTEMD_SERVICE_FILE="/etc/systemd/system/filebrowser.service"
 UPDATE_SCRIPT_PATH="/usr/local/bin/update-filebrowser.sh"
 # Path for the cron job file
 CRON_FILE_PATH="/etc/cron.d/filebrowser-updater"
+# Log file for the update script
+LOG_FILE="/var/log/filebrowser-update.log"
 
 # --- Script Logic ---
 
@@ -96,7 +98,7 @@ echo "[SUCCESS] Configuration file created."
 # 7. Download and Install File Browser
 echo "[INFO] Downloading latest File Browser binary from GitHub..."
 TEMP_FILE="/tmp/filebrowser-bin"
-curl -L "$DOWNLOAD_URL" -o "$TEMP_FILE"
+curl --fail -L "$DOWNLOAD_URL" -o "$TEMP_FILE"
 echo "[INFO] Installing binary to ${INSTALL_DIR}/${BINARY_NAME}..."
 install -m 755 "$TEMP_FILE" "${INSTALL_DIR}/${BINARY_NAME}"
 rm -f "$TEMP_FILE"
@@ -110,7 +112,7 @@ else
     exit 1
 fi
 
-# 9. Create the systemd service file (Corrected ExecStart line)
+# 9. Create the systemd service file
 echo "[INFO] Creating systemd service file at ${SYSTEMD_SERVICE_FILE}..."
 cat << EOF > "$SYSTEMD_SERVICE_FILE"
 [Unit]
@@ -133,7 +135,7 @@ systemctl enable filebrowser.service
 systemctl start filebrowser.service
 echo "[SUCCESS] Service enabled and started."
 
-# 11. Setup Automatic Daily Updates
+# 11. Setup Automatic Daily Updates with Robust Error Handling
 echo "[INFO] Setting up automatic daily updates..."
 cat << EOF > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
@@ -141,25 +143,41 @@ set -e
 TEMP_FILE="/tmp/filebrowser-update"
 DOWNLOAD_URL="https://github.com/gtsteffaniak/filebrowser/releases/latest/download/linux-amd64-filebrowser"
 DISCORD_WEBHOOK_URL="${DISCORD_WEBHOOK_URL}"
-curl -L "\$DOWNLOAD_URL" -o "\$TEMP_FILE"
+echo "--- File Browser Update Started: \$(date) ---"
+echo "Downloading latest File Browser..."
+# Use --fail to ensure curl exits with an error on HTTP failures (like 404)
+# Use -sS for silent output on success, but show errors.
+curl -sS --fail -L "\$DOWNLOAD_URL" -o "\$TEMP_FILE"
+# Add a check to ensure the file was downloaded and is not empty
+if [ ! -s "\$TEMP_FILE" ]; then
+    echo "Error: Download failed or the downloaded file is empty. Aborting update." >&2
+    rm -f "\$TEMP_FILE" # Clean up potentially empty file
+    exit 1
+fi
+echo "Updating binary..."
 systemctl stop filebrowser.service
 install -m 755 "\$TEMP_FILE" "/usr/local/bin/filebrowser"
 systemctl start filebrowser.service
 rm -f "\$TEMP_FILE"
+echo "File Browser update complete."
 if [ -n "\$DISCORD_WEBHOOK_URL" ]; then
     HOSTNAME=\$(hostname)
     MESSAGE="✅ File Browser on server '\${HOSTNAME}' was successfully updated."
     JSON_PAYLOAD="{\\"content\\": \\"\${MESSAGE}\\"}"
+    echo "Sending Discord notification..."
     curl -H "Content-Type: application/json" -X POST -d "\$JSON_PAYLOAD" "\$DISCORD_WEBHOOK_URL"
 fi
+echo "--- Update Finished ---"
+echo ""
 exit 0
 EOF
 chmod +x "$UPDATE_SCRIPT_PATH"
 echo "[INFO] Created update script at ${UPDATE_SCRIPT_PATH}"
 
-# Create the cron job file to run the script daily at 8:15 PM
-echo "30 20 * * * root $UPDATE_SCRIPT_PATH >/dev/null 2>&1" > "$CRON_FILE_PATH"
-echo "[SUCCESS] Cron job created to run daily at 8:15 PM."
+# Create the cron job file to run the script daily at 8:40 PM and log output
+echo "40 20 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
+echo "[SUCCESS] Cron job created to run daily at 8:40 PM."
+echo "[INFO] Update results will be logged to ${LOG_FILE}"
 
 # --- Final Instructions ---
 echo
@@ -169,4 +187,5 @@ echo "   - Access it at: http://<your-server-ip>:${FB_PORT}"
 echo "   - Config file:  ${CONFIG_FILE_PATH}"
 echo "   - Database will be at: ${CONFIG_DIR}/filebrowser.db"
 echo "   - To check status: sudo systemctl status filebrowser.service"
+echo "   - Update logs are at: ${LOG_FILE}"
 echo
