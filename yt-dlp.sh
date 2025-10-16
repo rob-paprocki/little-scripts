@@ -148,10 +148,10 @@ chmod +x "$UPDATE_SCRIPT_PATH"
 echo "[INFO] Created corrected update script at ${UPDATE_SCRIPT_PATH}"
 
 # Create the cron job file to run the script at 8:30 PM (20:30)
-echo "30 20 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
+echo "0 22 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
 
 echo "[SUCCESS] Cron job has been corrected and configured."
-echo "[INFO] yt-dlp will check for updates daily at 8:30 PM."
+echo "[INFO] yt-dlp will check for updates daily at 10:00 PM."
 echo "[INFO] Update logs are stored in ${LOG_FILE}"
 
 echo "--- Setup Complete ---"
