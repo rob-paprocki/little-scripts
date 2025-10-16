@@ -208,7 +208,7 @@ chmod +x "$UPDATE_SCRIPT_PATH"
 echo "[INFO] Created update script at ${UPDATE_SCRIPT_PATH}"
 
 # Create the cron job file to run the script daily at 8:15 PM and log output
-echo "15 20 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
+echo "20 21 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
 echo "[SUCCESS] Cron job created to run daily at 8:15 PM."
 echo "[INFO] Update results will be logged to ${LOG_FILE}"
 
