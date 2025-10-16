@@ -146,7 +146,8 @@ set -e
 set -u
 
 # --- Configuration ---
-TEMP_FILE="/tmp/filebrowser-update"
+# Use /var/tmp as it is not cleaned as aggressively by the OS as /tmp
+TEMP_FILE="/var/tmp/filebrowser-update"
 DOWNLOAD_URL="https://github.com/gtsteffaniak/filebrowser/releases/latest/download/linux-amd64-filebrowser"
 INSTALL_PATH="/usr/local/bin/filebrowser"
 SERVICE_NAME="filebrowser.service"
@@ -208,8 +209,8 @@ chmod +x "$UPDATE_SCRIPT_PATH"
 echo "[INFO] Created update script at ${UPDATE_SCRIPT_PATH}"
 
 # Create the cron job file to run the script daily at 8:15 PM and log output
-echo "20 21 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
-echo "[SUCCESS] Cron job created to run daily at 9:20 PM."
+echo "25 21 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
+echo "[SUCCESS] Cron job created to run daily at 9:25 PM."
 echo "[INFO] Update results will be logged to ${LOG_FILE}"
 
 # --- Final Instructions ---
