@@ -36,15 +36,22 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# 2. Prompt for Port Number
+# 2. Prompt for Port Number with a default
 FB_PORT=""
 while true; do
-    read -p "Enter the port you want File Browser to run on (e.g., 8080): " FB_PORT
+    read -p "Enter the port for File Browser [8080]: " FB_PORT
+    
+    # If the user just hits Enter, use the default value.
+    if [ -z "$FB_PORT" ]; then
+        FB_PORT="8080"
+    fi
+
     if [[ "$FB_PORT" =~ ^[0-9]+$ ]] && [ "$FB_PORT" -ge 1 ] && [ "$FB_PORT" -le 65535 ]; then
         echo "[INFO] File Browser will be configured to run on port ${FB_PORT}."
         break
     else
         echo "[ERROR] Invalid input. Please enter a number between 1 and 65535." >&2
+        FB_PORT="" # Reset for the loop
     fi
 done
 
