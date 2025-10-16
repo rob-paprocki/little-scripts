@@ -1,23 +1,14 @@
 #!/bin/bash
 
 # --- Configuration ---
-# Installation directory for the binary
 INSTALL_DIR="/usr/local/bin"
-# Name of the final executable
 BINARY_NAME="filebrowser"
-# URL to download the latest linux-amd64 binary
 DOWNLOAD_URL="https://github.com/gtsteffaniak/filebrowser/releases/latest/download/linux-amd64-filebrowser"
-# Directory for configuration files and data (as root)
 CONFIG_DIR="/etc/filebrowser"
-# Path to the main config file
 CONFIG_FILE_PATH="${CONFIG_DIR}/config.yaml"
-# Systemd service file path
 SYSTEMD_SERVICE_FILE="/etc/systemd/system/filebrowser.service"
-# Path for the separate update script
 UPDATE_SCRIPT_PATH="/usr/local/bin/update-filebrowser.sh"
-# Path for the cron job file
 CRON_FILE_PATH="/etc/cron.d/filebrowser-updater"
-# Log file for the update script
 LOG_FILE="/var/log/filebrowser-update.log"
 
 # --- Script Logic ---
@@ -145,7 +136,6 @@ set -e
 set -u
 
 # --- Configuration ---
-# Use /var/tmp as it is not cleaned as aggressively by the OS as /tmp
 TEMP_FILE="/var/tmp/filebrowser-update"
 DOWNLOAD_URL="https://github.com/gtsteffaniak/filebrowser/releases/latest/download/linux-amd64-filebrowser"
 INSTALL_PATH="/usr/local/bin/filebrowser"
@@ -179,21 +169,20 @@ rm -f "$TEMP_FILE"
 INSTALLED_VERSION=$($INSTALL_PATH version | grep 'Version' | awk '{print $3}')
 echo "File Browser update complete. Now running: ${INSTALLED_VERSION}"
 
-# Send Discord notification if the URL was provided
-if [[ -n "$DISCORD_WEBHOOK_URL" && "$DISCORD_WEBHOOK_URL" != "##DISCORD_WEBHOOK_URL_PLACEHOLDER##" ]]; then
+# Send Discord notification if the URL was provided.
+# This simpler check only verifies that the variable is not empty.
+if [[ -n "$DISCORD_WEBHOOK_URL" ]]; then
     HOSTNAME=$(hostname)
     MESSAGE="✅ File Browser on server '${HOSTNAME}' was successfully updated to ${INSTALLED_VERSION}."
     JSON_PAYLOAD=$(printf '{"content": "%s"}' "$MESSAGE")
     
     echo "Sending Discord notification..."
-    # Send notification and capture the HTTP status code from Discord's server.
     HTTP_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
         -H "Content-Type: application/json" \
         -X POST \
         -d "$JSON_PAYLOAD" \
         "$DISCORD_WEBHOOK_URL")
 
-    # Check if the notification was successful. Discord returns 204 on success.
     if [ "$HTTP_STATUS" -eq 204 ]; then
         echo "Discord notification sent successfully (HTTP Status: $HTTP_STATUS)."
     else
@@ -207,15 +196,16 @@ echo ""
 exit 0
 EOF
 
-# Use sed to safely replace the placeholder with the actual webhook URL.
-sed -i "s|##DISCORD_WEBHOOK_URL_PLACEHOLDER##|${DISCORD_WEBHOOK_URL}|g" "$UPDATE_SCRIPT_PATH"
+# Replace ONLY the first instance of the placeholder to avoid breaking the logic check.
+# The installer fills this value, and the updater script just checks if it's empty.
+sed -i "s|##DISCORD_WEBHOOK_URL_PLACEHOLDER##|${DISCORD_WEBHOOK_URL}|" "$UPDATE_SCRIPT_PATH"
 
 chmod +x "$UPDATE_SCRIPT_PATH"
 echo "[INFO] Created update script at ${UPDATE_SCRIPT_PATH}"
 
 # Create the cron job file to run the script daily at 9:30 PM and log output
-echo "30 21 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
-echo "[SUCCESS] Cron job created to run daily at 9:30 PM."
+echo "50 21 * * * root $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1" > "$CRON_FILE_PATH"
+echo "[SUCCESS] Cron job created to run daily at 9:50 PM."
 echo "[INFO] Update results will be logged to ${LOG_FILE}"
 
 # --- Final Instructions ---
