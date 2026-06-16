@@ -1,8 +1,8 @@
 {
     "schema": "1.0",
     "details": {
-        "displayName": "Clear Message History (Keyword /clear)",
-        "description": "Deletes (soft-deletes) all messages in your Teams self-chat when you type /clear.",
+        "displayName": "Clear Message History (Keyword: clearchat)",
+        "description": "Deletes (soft-deletes) all messages in your Teams self-chat when you type clearchat.",
         "createdTime": "2026-06-16T00:00:00.0000000Z",
         "packageTelemetryId": "00000000-0000-0000-0000-000000000000",
         "creator": "N/A",
@@ -14,7 +14,7 @@
             "suggestedCreationType": "New",
             "creationType": "Existing, New, Update",
             "details": {
-                "displayName": "Clear Message History (Keyword /clear)"
+                "displayName": "Clear Message History (Keyword: clearchat)"
             },
             "configurableBy": "User",
             "hierarchy": "Root",
