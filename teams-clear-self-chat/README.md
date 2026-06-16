@@ -61,7 +61,7 @@ Both packages share the same action logic; only the **trigger** differs.
 
 ```
 TRIGGER
-  • Keyword pkg:  "When keywords are mentioned"  →  search "clearchat" in chat 48:notes
+  • Keyword pkg:  "When keywords are mentioned"  →  keyword "clearchat" (watches your chats)
   • Manual pkg:   "Manually trigger a flow" (Run button)
 
 ACTIONS
@@ -122,9 +122,11 @@ this scope — if a delete returns `403`, see Troubleshooting.
 2. Upload **`ClearSelfChat_KeywordTrigger.zip`**.
 3. Under **Related resources**, set the **Microsoft Teams** action to **Select during
    import** and pick (or create) your Teams connection. Click **Import**.
-4. Open the imported flow and confirm the trigger shows **chat = Notes / your
-   self-chat**. (If the chat picker is empty, pick your "Notes"/self chat manually, or
-   keep the `48:notes` value.) **Save**.
+4. Open the imported flow. The trigger needs only the keyword **`clearchat`**. Newer
+   connector versions **removed the per-chat picker** (`requestBody/chats`), so the
+   trigger watches your chats and the flow itself always targets your self-chat for
+   deletion. **Save**. If Power Automate ever flags a leftover `requestBody/chats`
+   parameter, delete it and save again.
 5. Type **`clearchat`** in your self-chat to fire it. (Keyword triggers poll, so allow
    up to a minute.)
 
