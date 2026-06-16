@@ -1,36 +1,14 @@
-# Teams "self-chat" `clearchat` — Power Automate flow
+# Teams "self-chat" cleaner — Power Automate flow
 
-Type **`clearchat`** in your Teams chat-with-yourself (*Notes* /
-[`48:notes`](https://teams.microsoft.com/l/chat/48:notes/conversations?context=%7B%22contextType%22%3A%22chat%22%7D))
-and have a Power Automate flow delete every message in that chat.
+A Power Automate flow that **deletes every message in your Teams chat-with-yourself**
+(*Notes* /
+[`48:notes`](https://teams.microsoft.com/l/chat/48:notes/conversations?context=%7B%22contextType%22%3A%22chat%22%7D)),
+triggered by a **Run button** (web / desktop / mobile app).
 
-This folder contains a **fixed, ready-to-import** version of that flow plus a full
-write-up of why the previous attempt (`ClearMessageHistory_v6`) failed.
-
----
-
-## TL;DR — why v6 kept failing the tests
-
-The v6 flow had **two independent, fatal bugs**, either of which fails every run:
-
-| # | v6 did this | Result | Fix |
-|---|-------------|--------|-----|
-| 1 | `GET …/messages?$filter=deletedDateTime eq null` | **HTTP 400** — `deletedDateTime` is **not** a filterable property. The *List messages in a chat* API only allows `$filter` on `lastModifiedDateTime`/`createdDateTime`, and only when paired with a matching `$orderby`. The **first action failed**, so nothing else ran. | Drop the `$filter`; filter in the flow instead. |
-| 2 | `DELETE …/messages/{id}` | **HTTP 405/404** — there is **no `DELETE` on a chat message** in Microsoft Graph. Messages are removed with **`POST …/messages/{id}/softDelete`**. | Use `POST …/softDelete`. |
-
-Two smaller issues were also corrected:
-
-3. **Wrong trigger.** v6 used a **manual "button"** trigger, not the keyword trigger
-   you wanted (that trigger lives in your `Clear v2` base package). The keyword itself
-   had to change from `/clear` to **`clearchat`** — see
-   [Design decisions](#design-decisions-and-why) for why a leading `/` can't be used.
-4. **Loop could never terminate / mis-counted.** The list endpoint also returns
-   **system messages** (`messageType: "systemEventMessage"`) that you cannot delete,
-   and soft-deleted messages can linger in the list. The corrected loop accounts for
-   both (see [How it works](#how-the-corrected-flow-works)).
-
-Sources: [List messages in a chat](https://learn.microsoft.com/graph/api/chat-list-messages?view=graph-rest-1.0#optional-query-parameters) ·
-[chatMessage: softDelete](https://learn.microsoft.com/graph/api/chatmessage-softdelete?view=graph-rest-1.0)
+> **Why a button and not a typed `/clear` command?** We tried hard to make a typed
+> keyword (`/clear`, then `clearchat`) trigger this. It can't work for the self-chat:
+> Teams will *create* the keyword subscription but never *delivers* the trigger for the
+> chat-with-yourself. Full story in [Appendix A](#appendix-a-why-not-a-typed-command).
 
 ---
 
@@ -38,31 +16,41 @@ Sources: [List messages in a chat](https://learn.microsoft.com/graph/api/chat-li
 
 ```
 teams-clear-self-chat/
-├── ClearSelfChat_KeywordTrigger.zip   ← IMPORT THIS (fires on "clearchat")
-├── ClearSelfChat_ManualButton.zip     ← fallback (Run button / mobile / scheduled)
-├── src/                               ← unzipped, human-readable source of both packages
-│   ├── keyword-trigger/…/definition.json
-│   └── manual-button/…/definition.json
-├── original/                          ← your two uploads, sanitized, for reference/diff
+├── ClearSelfChat_ManualButton.zip     ← IMPORT THIS
+├── src/manual-button/…/definition.json   ← unzipped, readable source
+├── original/                          ← your two original uploads, sanitized, for diff
 │   ├── v6_ClearMessageHistory_definition.json
 │   └── base_Clearv2_definition.json
 └── README.md
 ```
 
-> **Privacy note:** the packages and reference copies here have had your tenant ID,
-> user ID, the `shared-teams-…` connection-instance name, and your work email
-> **removed**. During import you'll simply select your own Microsoft Teams connection.
+> **Privacy note:** every committed file (and the zip) has had your tenant ID, user ID,
+> the `shared-teams-…` connection-instance name, and your work email **removed**. You
+> select your own Microsoft Teams connection during import; everything else (your
+> self-chat ID) is resolved at run time from `GET /me`.
 
 ---
 
-## How the corrected flow works
+## Import & run
 
-Both packages share the same action logic; only the **trigger** differs.
+1. **[make.powerautomate.com](https://make.powerautomate.com/)** → **My flows** →
+   **Import** → **Import Package (Legacy)**.
+2. Upload **`ClearSelfChat_ManualButton.zip`**.
+3. Under **Related resources**, set the **Microsoft Teams** action to **Select during
+   import** and pick (or create) your Teams connection → **Import**.
+4. Open the flow → **Save**.
+5. Run it: the **Run** button in the designer, **My flows → Run**, or the **Power
+   Automate mobile app** (handy from your phone). It takes no inputs.
+
+**First, a 20-second pre-check** so the very first run works — see
+[Confirm your self-chat ID](#confirm-your-self-chat-id) below.
+
+---
+
+## How it works
 
 ```
-TRIGGER
-  • Keyword pkg:  "When keywords are mentioned"  →  keyword "clearchat" (watches your chats)
-  • Manual pkg:   "Manually trigger a flow" (Run button)
+TRIGGER  "Manually trigger a flow" (Run button) — no inputs
 
 ACTIONS
   1. Get_My_User_Id        GET  /me?$select=id
@@ -82,132 +70,95 @@ ACTIONS
 
 ### Design decisions (and why)
 
-- **Keyword is `clearchat`, not `/clear`.** The "When keywords are mentioned" search is
-  parsed as an OData/KQL query, which rejects a leading `/` with `An identifier was
-  expected at position 0`. A distinctive plain word avoids that error — and, unlike a
-  common word such as "clear", won't fire this destructive flow by accident.
-- **Collect first, then delete.** Deleting while you page can skip or re-loop over
-  messages (soft-delete changes `lastModifiedDateTime`, which reshuffles the default
-  ordering) and can invalidate the paging cursor you're deleting through. Building the
-  full id list first, then deleting, is order-independent and can't loop forever —
-  pagination ends when Graph stops returning `@odata.nextLink`.
+- **Soft-delete, not delete.** Microsoft Graph has **no `DELETE` for a chat message**;
+  the only way to remove one is `POST …/messages/{id}/softDelete`
+  ([docs](https://learn.microsoft.com/graph/api/chatmessage-softdelete?view=graph-rest-1.0)).
+  Removed messages are recoverable for a while via
+  [`undoSoftDelete`](https://learn.microsoft.com/graph/api/chatmessage-undosoftdelete?view=graph-rest-1.0).
+- **Collect first, then delete.** Deleting while you page can skip messages, re-loop, or
+  invalidate the paging cursor. Snapshotting all ids first (paging via `@odata.nextLink`)
+  is order-independent and always terminates.
 - **Grow the id list with "Append to array variable", not "Set variable".** Power
   Automate rejects a `Set variable` whose new value references the same variable
-  (`Self reference is not supported`), so each page's ids are appended one at a time
-  inside a sequential inner `For each`.
-- **Filter in the flow, not the URL.** Because `$filter=deletedDateTime eq null` is
-  rejected by Graph, the `Keep_Deletable_Messages` step does the equivalent filtering
-  client-side and **also drops `systemEventMessage` items** you can't delete.
-- **`$top=50`** is the maximum the API allows; smaller pages just mean more loops.
-- **Sequential deletes** (`concurrency = 1`) keep you under Graph's chat-write
-  throttling limits. Platform default retry handles the occasional `429`.
-- **Self-chat id is resolved, not hard-coded.** `48:notes` is a Teams *deep-link*
-  alias and is **not** guaranteed to work as a Graph `{chat-id}`. The flow derives the
-  documented one-on-one id `19:{myId}_{myId}@unq.gbl.spaces` from `GET /me`. See
-  [Troubleshooting](#3-getmessages-returns-404--invalid-chat-id) if your tenant differs.
+  (`Self reference is not supported`), so ids are appended one at a time in a sequential
+  inner `For each`.
+- **Filter in the flow, not the URL.** `$filter=deletedDateTime eq null` is **rejected**
+  by Graph (only `lastModifiedDateTime`/`createdDateTime` are filterable). The
+  `Keep_Deletable_Messages` step filters client-side and also drops `systemEventMessage`
+  items you can't delete.
+- **`$top=50`** is the API maximum; **sequential deletes** (`concurrency = 1`) stay under
+  Graph's chat-write throttling, and the platform's default retry handles the rare `429`.
 
 ### Permissions
-
-The Microsoft Teams connector calls Graph with **delegated** permission. Soft-deleting
-chat messages needs **`Chat.ReadWrite`** (delegated; *not* supported for personal
-Microsoft accounts or application-only). The Teams connector normally already carries
-this scope — if a delete returns `403`, see Troubleshooting.
+The Teams connector calls Graph with **delegated** permission; soft-delete needs
+**`Chat.ReadWrite`** (not supported for personal Microsoft accounts). The connector
+usually already carries this — if a delete returns `403`, see Troubleshooting.
 
 ---
 
-## Import & set up
+## Confirm your self-chat ID
 
-1. Go to **[make.powerautomate.com](https://make.powerautomate.com/)** → **My flows** →
-   **Import** → **Import Package (Legacy)**.
-2. Upload **`ClearSelfChat_KeywordTrigger.zip`**.
-3. Under **Related resources**, set the **Microsoft Teams** action to **Select during
-   import** and pick (or create) your Teams connection. Click **Import**.
-4. Open the imported flow. The trigger needs only the keyword **`clearchat`**. Newer
-   connector versions **removed the per-chat picker** (`requestBody/chats`), so the
-   trigger watches your chats and the flow itself always targets your self-chat for
-   deletion. **Save**. If Power Automate ever flags a leftover `requestBody/chats`
-   parameter, delete it and save again.
-5. Type **`clearchat`** in your self-chat to fire it. (Keyword triggers poll, so allow
-   up to a minute.)
+The flow targets `19:{yourId}_{yourId}@unq.gbl.spaces`, the documented one-on-one chat
+id. This is correct for most tenants, but verify in 20 seconds so run #1 succeeds:
 
-> Prefer the manual version? Import `ClearSelfChat_ManualButton.zip` instead and run it
-> from the **Run** button (web/desktop) or the Power Automate mobile app — handy as a
-> reliable fallback while you confirm the keyword trigger behaves in the self-chat.
-
----
-
-## Test it
-
-1. Post a few throwaway messages in the self-chat (e.g. `test1`, `test2`).
-2. Trigger the flow (type `clearchat`, or use the Run button).
-3. Open the run in Power Automate → every action should be **green**, and
-   `Delete_Each_Message` should show one iteration per message.
-4. The chat should empty out. (Teams may take a moment to reflect the deletions.)
-
-If a step is red, open it and read the response — the
-[Troubleshooting](#troubleshooting) table maps the common ones to fixes.
+1. Open [Graph Explorer](https://developer.microsoft.com/graph/graph-explorer), sign in.
+2. Run `GET https://graph.microsoft.com/v1.0/me/chats?$expand=members` and find the chat
+   whose **only member is you** — that's the self-chat. Copy its `id`.
+   - If it looks like `19:…_…@unq.gbl.spaces` with your id twice → the flow's default is
+     already right, nothing to change.
+   - If it's different (some tenants expose it as `48:notes`) → in the flow, open
+     **`Initialize chatId`** and replace the expression with that literal id.
 
 ---
 
 ## Troubleshooting
 
-### 1. The flow never fires on `clearchat`
-The biggest **unknown** here: Teams has documented limits on triggering flows from the
-**chat-with-yourself** (e.g. the "For a selected message" action doesn't appear there).
-The keyword trigger *usually* works, but if nothing runs:
-- Confirm under **My flows → (flow) → Run history** that no run started.
-- Make sure the flow lives in your **default environment**.
-- Give it ~1 minute (the trigger isn't instant).
-- **Fallback:** use `ClearSelfChat_ManualButton.zip` and run it on demand / on a
-  [schedule](https://learn.microsoft.com/power-automate/run-scheduled-tasks). The
-  delete logic is identical, so this is a fully functional Plan B.
-
-### 2. `Get_My_User_Id` fails (401/403)
-The Teams connection isn't authorized. Re-create the connection
-(**Data → Connections**) and re-point the action to it.
-
-### 3. `Get_Messages_Page` returns 404 / "invalid chat id"
-Your self-chat doesn't use the `19:{myId}_{myId}@unq.gbl.spaces` shape. Find the real id
-and hard-code it:
-- In [Graph Explorer](https://developer.microsoft.com/graph/graph-explorer) run
-  `GET https://graph.microsoft.com/v1.0/me/chats?$expand=members` and find the
-  one-on-one chat whose **only member is you** — copy its `id`.
-- In the flow, change **`Initialize chatId`** from the expression to that literal id
-  (e.g. `19:…@unq.gbl.spaces`). You can also try the literal `48:notes` there.
-
-### 4. A `Soft_Delete_Message` returns 403
-Your Teams connector lacks **`Chat.ReadWrite`** consent. Ask an admin to consent, or
-test the call in Graph Explorer first (it will prompt for the scope):
-`POST /me/chats/{chatId}/messages/{messageId}/softDelete`.
-
-### 5. Some deletes return 429 (throttling)
-Expected on very large chats; the platform retries automatically. The loop is already
-sequential to minimize this. For thousands of messages, just run it again — already
-soft-deleted messages are skipped by the filter.
-
-### 6. Only *some* messages were deleted
-`softDelete` only removes messages **you** authored and **non-system** messages. In a
-self-chat everything is yours, so the only skips should be system notices, which can't
-be removed by users.
+| Symptom | Cause & fix |
+|---|---|
+| `Get_My_User_Id` 401/403 | Teams connection not authorized — recreate it under **Data → Connections** and re-point the action. |
+| `Get_Messages_Page` 404 / "invalid chat id" | Your self-chat id differs from the default — set the real id in `Initialize chatId` (see [Confirm your self-chat ID](#confirm-your-self-chat-id)). |
+| `Soft_Delete_Message` 403 | Connector lacks **`Chat.ReadWrite`** consent — test `POST /me/chats/{id}/messages/{id}/softDelete` in Graph Explorer (it'll prompt for the scope), or ask an admin. |
+| Some deletes 429 | Throttling on large chats; platform retries. Just run again — already-deleted messages are skipped by the filter. |
+| Only *some* messages gone | `softDelete` only removes your own, non-system messages. In a self-chat that's everything except system notices (which can't be removed). |
 
 ---
 
-## Rebuild by hand (if you'd rather not import)
+## Appendix A: why not a typed command?
 
-Create an automated cloud flow with the **When keywords are mentioned** trigger
-(search `clearchat`, your self chat), then add the actions exactly as listed in
-[How it works](#how-the-corrected-flow-works). Every Graph call uses the Microsoft
-Teams connector's **"Send an HTTP request to Teams"** action (operation `HttpRequest`)
-with just **URI** + **Method** (+ no body for `softDelete`). The full, annotated
-definition is in
-[`src/keyword-trigger/…/definition.json`](src/keyword-trigger/Microsoft.Flow/flows/de8e0ae4-ee88-45a4-99ba-0f584a422b30/definition.json).
+The original goal was to type `/clear` in the self-chat and have it wipe itself. We
+built that on the Teams **"When keywords are mentioned"** trigger and fixed a chain of
+real issues — but it ultimately can't work for the self-chat. The trail:
+
+1. **`Self reference is not supported`** on save — the id accumulator used a
+   self-referencing `Set variable`. Fixed with `Append to array variable`.
+2. **`An identifier was expected at position 0`** — the keyword search is parsed as an
+   OData/KQL query, which rejects a leading `/`. Switched the keyword to `clearchat`.
+3. **`'RequestBody/chats' is no longer present in the operation schema`** — the
+   *designer's* static schema check flags this param… but the **runtime requires it**:
+   without it the subscription resource becomes `chats//messages` (empty chat id) and
+   fails with *"Subscription is not supported."* So the param must stay.
+4. **With the param, the subscription is created (HTTP 200 / inner 204) — but the flow
+   never fires** when you type the keyword in the self-chat.
+
+Step 4 is the dealbreaker: Teams will happily *subscribe* to `48:notes`, but it doesn't
+*deliver* keyword/change notifications for the chat-with-yourself (consistent with the
+documented limits on triggering flows from the self-chat). A button (or a scheduled poll
+that reads the chat directly) is the only reliable way. We chose the **button**.
+
+## Appendix B: the original `v6` bugs
+
+The first attempt (`ClearMessageHistory_v6`, in `original/`) failed its tests for two
+independent reasons, both fixed in this flow:
+
+- `GET …/messages?$filter=deletedDateTime eq null` → **HTTP 400** (`deletedDateTime`
+  isn't filterable).
+- `DELETE …/messages/{id}` → **HTTP 405/404** (no `DELETE` for chat messages; use
+  `POST …/softDelete`).
 
 ---
 
 ## References
-
-- [List messages in a chat — supported `$filter`/`$orderby`/`$top`](https://learn.microsoft.com/graph/api/chat-list-messages?view=graph-rest-1.0#optional-query-parameters)
 - [chatMessage: softDelete — `POST …/softDelete`, `Chat.ReadWrite`](https://learn.microsoft.com/graph/api/chatmessage-softdelete?view=graph-rest-1.0)
-- [chatMessage: undoSoftDelete (to recover, within retention)](https://learn.microsoft.com/graph/api/chatmessage-undosoftdelete?view=graph-rest-1.0)
+- [chatMessage: undoSoftDelete (recover within retention)](https://learn.microsoft.com/graph/api/chatmessage-undosoftdelete?view=graph-rest-1.0)
+- [List messages in a chat — supported `$filter`/`$orderby`/`$top`](https://learn.microsoft.com/graph/api/chat-list-messages?view=graph-rest-1.0#optional-query-parameters)
 - [chat resource — one-on-one chat id format](https://learn.microsoft.com/graph/api/chat-get?view=graph-rest-1.0#examples)
-- [Use flows in Microsoft Teams (triggers incl. "When keywords are mentioned")](https://learn.microsoft.com/power-automate/teams/overview)
