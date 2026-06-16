@@ -151,33 +151,33 @@
                                 "where": "@and(equals(item()?['messageType'], 'message'), equals(coalesce(item()?['deletedDateTime'], ''), ''))"
                             }
                         },
-                        "Select_Message_Ids": {
+                        "Collect_Page_Ids": {
                             "runAfter": {
                                 "Keep_Deletable_Messages": [
                                     "Succeeded"
                                 ]
                             },
-                            "type": "Select",
-                            "inputs": {
-                                "from": "@body('Keep_Deletable_Messages')",
-                                "select": "@item()?['id']"
-                            }
-                        },
-                        "Append_Message_Ids": {
-                            "runAfter": {
-                                "Select_Message_Ids": [
-                                    "Succeeded"
-                                ]
+                            "type": "Foreach",
+                            "foreach": "@body('Keep_Deletable_Messages')",
+                            "runtimeConfiguration": {
+                                "concurrency": {
+                                    "repetitions": 1
+                                }
                             },
-                            "type": "SetVariable",
-                            "inputs": {
-                                "name": "messageIds",
-                                "value": "@union(variables('messageIds'), body('Select_Message_Ids'))"
+                            "actions": {
+                                "Append_Message_Id": {
+                                    "runAfter": {},
+                                    "type": "AppendToArrayVariable",
+                                    "inputs": {
+                                        "name": "messageIds",
+                                        "value": "@item()?['id']"
+                                    }
+                                }
                             }
                         },
                         "Set_Next_Link": {
                             "runAfter": {
-                                "Append_Message_Ids": [
+                                "Collect_Page_Ids": [
                                     "Succeeded"
                                 ]
                             },
