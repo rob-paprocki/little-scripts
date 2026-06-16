@@ -1,0 +1,90 @@
+{
+    "name": "e09bbebd-291d-404a-b9fc-76fe2cfb7fe4",
+    "id": "/providers/Microsoft.Flow/flows/e09bbebd-291d-404a-b9fc-76fe2cfb7fe4",
+    "type": "Microsoft.Flow/flows",
+    "properties": {
+        "apiId": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+        "displayName": "Clear Messages",
+        "definition": {
+            "metadata": {
+                "workflowEntityId": null,
+                "processAdvisorMetadata": null,
+                "flowChargedByPaygo": null,
+                "flowclientsuspensionreason": "None",
+                "flowclientsuspensiontime": null,
+                "flowclientsuspensionreasondetails": null,
+                "provisioningMethod": "FromDefinition",
+                "failureAlertSubscription": true,
+                "clientLastModifiedTime": "2026-06-16T13:30:16.3561643Z",
+                "connectionKeySavedTimeKey": "2026-06-16T13:30:16.3561643Z",
+                "creationSource": "Portal",
+                "modifiedSources": "Portal"
+            },
+            "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+            "contentVersion": "1.0.0.0",
+            "parameters": {
+                "$authentication": {
+                    "defaultValue": {},
+                    "type": "SecureObject"
+                },
+                "$connections": {
+                    "defaultValue": {},
+                    "type": "Object"
+                }
+            },
+            "triggers": {
+                "When_keywords_are_mentioned": {
+                    "type": "OpenApiConnectionWebhook",
+                    "inputs": {
+                        "parameters": {
+                            "$search": "\"/clear\"",
+                            "threadType": "groupchat",
+                            "requestBody/chats": [
+                                "48:notes"
+                            ]
+                        },
+                        "host": {
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                            "connectionName": "shared_teams",
+                            "operationId": "WebhookKeywordTrigger"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                    }
+                }
+            },
+            "actions": {
+                "Condition": {
+                    "actions": {},
+                    "runAfter": {},
+                    "else": {
+                        "actions": {}
+                    },
+                    "expression": {
+                        "and": [
+                            {
+                                "equals": [
+                                    "",
+                                    ""
+                                ]
+                            }
+                        ]
+                    },
+                    "type": "If"
+                }
+            },
+            "outputs": {}
+        },
+        "connectionReferences": {
+            "shared_teams": {
+                "connectionName": "shared_teams",
+                "source": "Embedded",
+                "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                "tier": "NotSpecified",
+                "apiName": "teams",
+                "isProcessSimpleApiReferenceConversionAlreadyDone": false
+            }
+        },
+        "flowFailureAlertSubscribed": false,
+        "isManaged": false
+    }
+}

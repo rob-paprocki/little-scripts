@@ -1,0 +1,213 @@
+{
+    "name": "d7ccbf9f-49e6-4cea-a90b-f1174019e015",
+    "id": "/providers/Microsoft.Flow/flows/d7ccbf9f-49e6-4cea-a90b-f1174019e015",
+    "type": "Microsoft.Flow/flows",
+    "properties": {
+        "apiId": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
+        "displayName": "Clear Message History",
+        "definition": {
+            "metadata": {
+                "workflowEntityId": null,
+                "processAdvisorMetadata": null,
+                "flowChargedByPaygo": null,
+                "flowclientsuspensionreason": "None",
+                "flowclientsuspensiontime": null,
+                "flowclientsuspensionreasondetails": null,
+                "provisioningMethod": "FromDefinition",
+                "failureAlertSubscription": true,
+                "clientLastModifiedTime": "2026-06-15T17:00:20.9098051Z",
+                "connectionKeySavedTimeKey": "2026-06-15T17:00:20.9098051Z",
+                "creationSource": "Portal",
+                "modifiedSources": "Portal"
+            },
+            "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+            "contentVersion": "1.0.0.0",
+            "parameters": {
+                "$authentication": {
+                    "defaultValue": {},
+                    "type": "SecureObject"
+                },
+                "$connections": {
+                    "defaultValue": {},
+                    "type": "Object"
+                }
+            },
+            "triggers": {
+                "manual": {
+                    "type": "Request",
+                    "kind": "Button",
+                    "inputs": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {},
+                            "required": []
+                        }
+                    }
+                }
+            },
+            "actions": {
+                "Initialize_Chat_ID": {
+                    "runAfter": {},
+                    "type": "InitializeVariable",
+                    "inputs": {
+                        "variables": [
+                            {
+                                "name": "chatId",
+                                "type": "string",
+                                "value": "48:notes"
+                            }
+                        ]
+                    }
+                },
+                "Initialize_Loop_Flag": {
+                    "runAfter": {
+                        "Initialize_Chat_ID": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "InitializeVariable",
+                    "inputs": {
+                        "variables": [
+                            {
+                                "name": "keepGoing",
+                                "type": "boolean",
+                                "value": true
+                            }
+                        ]
+                    }
+                },
+                "Delete_All_Messages_Loop": {
+                    "actions": {
+                        "Get_Chat_Messages": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                                "parameters": {
+                                    "Uri": "https://graph.microsoft.com/v1.0/me/chats/@{variables('chatId')}/messages?$filter=deletedDateTime eq null&$top=50",
+                                    "Method": "GET",
+                                    "ContentType": "application/json"
+                                },
+                                "host": {
+                                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                                    "connectionName": "shared_teams",
+                                    "operationId": "HttpRequest"
+                                },
+                                "authentication": {
+                                    "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                                    "type": "Raw"
+                                }
+                            },
+                            "runAfter": {}
+                        },
+                        "Parse_Messages": {
+                            "runAfter": {
+                                "Get_Chat_Messages": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@body('Get_Chat_Messages')",
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "Check_If_Messages_Remain": {
+                            "actions": {
+                                "Stop_Loop": {
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "keepGoing",
+                                        "value": false
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Parse_Messages": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "else": {
+                                "actions": {
+                                    "For_Each_Message": {
+                                        "foreach": "@body('Parse_Messages')?['value']",
+                                        "actions": {
+                                            "Delete_Message": {
+                                                "type": "OpenApiConnection",
+                                                "inputs": {
+                                                    "parameters": {
+                                                        "Uri": "https://graph.microsoft.com/v1.0/me/chats/@{variables('chatId')}/messages/@{items('For_Each_Message')?['id']}",
+                                                        "Method": "DELETE",
+                                                        "ContentType": "application/json"
+                                                    },
+                                                    "host": {
+                                                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                                                        "connectionName": "shared_teams",
+                                                        "operationId": "HttpRequest"
+                                                    },
+                                                    "authentication": {
+                                                        "value": "@json(decodeBase64(triggerOutputs().headers['X-MS-APIM-Tokens']))['$ConnectionKey']",
+                                                        "type": "Raw"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "type": "Foreach"
+                                    }
+                                }
+                            },
+                            "expression": {
+                                "and": [
+                                    {
+                                        "equals": [
+                                            "length(body('Parse_Messages')?['value'])",
+                                            0
+                                        ]
+                                    }
+                                ]
+                            },
+                            "type": "If"
+                        }
+                    },
+                    "runAfter": {
+                        "Initialize_Loop_Flag": [
+                            "Succeeded"
+                        ]
+                    },
+                    "expression": "@equals(variables('keepGoing'),false)",
+                    "limit": {
+                        "count": 500,
+                        "timeout": "PT2H"
+                    },
+                    "type": "Until"
+                }
+            },
+            "outputs": {}
+        },
+        "connectionReferences": {
+            "shared_teams": {
+                "connectionName": "shared_teams",
+                "source": "Invoker",
+                "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                "tier": "NotSpecified",
+                "apiName": "teams",
+                "isProcessSimpleApiReferenceConversionAlreadyDone": false
+            }
+        },
+        "flowFailureAlertSubscribed": false,
+        "isManaged": false
+    }
+}
