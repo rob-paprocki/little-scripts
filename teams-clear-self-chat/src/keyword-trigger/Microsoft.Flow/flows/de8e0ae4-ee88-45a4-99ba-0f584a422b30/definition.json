@@ -28,10 +28,7 @@
                     "inputs": {
                         "parameters": {
                             "$search": "clearchat",
-                            "threadType": "groupchat",
-                            "requestBody/chats": [
-                                "48:notes"
-                            ]
+                            "threadType": "groupchat"
                         },
                         "host": {
                             "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
