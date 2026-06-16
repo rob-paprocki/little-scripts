@@ -1,0 +1,54 @@
+{
+    "schema": "1.0",
+    "details": {
+        "displayName": "Clear Message History (Manual button)",
+        "description": "Deletes (soft-deletes) all messages in your Teams self-chat when run manually.",
+        "createdTime": "2026-06-16T00:00:00.0000000Z",
+        "packageTelemetryId": "00000000-0000-0000-0000-000000000000",
+        "creator": "N/A",
+        "sourceEnvironment": ""
+    },
+    "resources": {
+        "d4a035e7-4791-45e6-8610-8a1f281d4218": {
+            "type": "Microsoft.Flow/flows",
+            "suggestedCreationType": "New",
+            "creationType": "Existing, New, Update",
+            "details": {
+                "displayName": "Clear Message History (Manual button)"
+            },
+            "configurableBy": "User",
+            "hierarchy": "Root",
+            "dependsOn": [
+                "e450b1af-73d2-4923-b78e-8dbd1be9e431",
+                "c0c91afc-5d01-433e-ac22-95f6787404e0"
+            ]
+        },
+        "e450b1af-73d2-4923-b78e-8dbd1be9e431": {
+            "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
+            "name": "shared_teams",
+            "type": "Microsoft.PowerApps/apis",
+            "suggestedCreationType": "Existing",
+            "details": {
+                "displayName": "Microsoft Teams",
+                "iconUri": "https://connectoricons-prod.azureedge.net/releases/v1.0.1812/1.0.1812.4744/teams/icon.png"
+            },
+            "configurableBy": "System",
+            "hierarchy": "Child",
+            "dependsOn": []
+        },
+        "c0c91afc-5d01-433e-ac22-95f6787404e0": {
+            "type": "Microsoft.PowerApps/apis/connections",
+            "suggestedCreationType": "Existing",
+            "creationType": "Existing",
+            "details": {
+                "displayName": "Microsoft Teams",
+                "iconUri": "https://connectoricons-prod.azureedge.net/releases/v1.0.1812/1.0.1812.4744/teams/icon.png"
+            },
+            "configurableBy": "User",
+            "hierarchy": "Child",
+            "dependsOn": [
+                "e450b1af-73d2-4923-b78e-8dbd1be9e431"
+            ]
+        }
+    }
+}
