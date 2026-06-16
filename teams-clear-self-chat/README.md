@@ -1,6 +1,6 @@
-# Teams "self-chat" `/clear` — Power Automate flow
+# Teams "self-chat" `clearchat` — Power Automate flow
 
-Type **`/clear`** in your Teams chat-with-yourself (*Notes* /
+Type **`clearchat`** in your Teams chat-with-yourself (*Notes* /
 [`48:notes`](https://teams.microsoft.com/l/chat/48:notes/conversations?context=%7B%22contextType%22%3A%22chat%22%7D))
 and have a Power Automate flow delete every message in that chat.
 
@@ -20,9 +20,10 @@ The v6 flow had **two independent, fatal bugs**, either of which fails every run
 
 Two smaller issues were also corrected:
 
-3. **Wrong trigger.** v6 used a **manual "button"** trigger, not the `/clear` keyword
-   trigger you wanted (that trigger lives in your `Clear v2` base package — it's
-   reused here, unchanged).
+3. **Wrong trigger.** v6 used a **manual "button"** trigger, not the keyword trigger
+   you wanted (that trigger lives in your `Clear v2` base package). The keyword itself
+   had to change from `/clear` to **`clearchat`** — see
+   [Design decisions](#design-decisions-and-why) for why a leading `/` can't be used.
 4. **Loop could never terminate / mis-counted.** The list endpoint also returns
    **system messages** (`messageType: "systemEventMessage"`) that you cannot delete,
    and soft-deleted messages can linger in the list. The corrected loop accounts for
@@ -37,7 +38,7 @@ Sources: [List messages in a chat](https://learn.microsoft.com/graph/api/chat-li
 
 ```
 teams-clear-self-chat/
-├── ClearSelfChat_KeywordTrigger.zip   ← IMPORT THIS (fires on "/clear")
+├── ClearSelfChat_KeywordTrigger.zip   ← IMPORT THIS (fires on "clearchat")
 ├── ClearSelfChat_ManualButton.zip     ← fallback (Run button / mobile / scheduled)
 ├── src/                               ← unzipped, human-readable source of both packages
 │   ├── keyword-trigger/…/definition.json
@@ -60,7 +61,7 @@ Both packages share the same action logic; only the **trigger** differs.
 
 ```
 TRIGGER
-  • Keyword pkg:  "When keywords are mentioned"  →  search "/clear" in chat 48:notes
+  • Keyword pkg:  "When keywords are mentioned"  →  search "clearchat" in chat 48:notes
   • Manual pkg:   "Manually trigger a flow" (Run button)
 
 ACTIONS
@@ -81,6 +82,10 @@ ACTIONS
 
 ### Design decisions (and why)
 
+- **Keyword is `clearchat`, not `/clear`.** The "When keywords are mentioned" search is
+  parsed as an OData/KQL query, which rejects a leading `/` with `An identifier was
+  expected at position 0`. A distinctive plain word avoids that error — and, unlike a
+  common word such as "clear", won't fire this destructive flow by accident.
 - **Collect first, then delete.** Deleting while you page can skip or re-loop over
   messages (soft-delete changes `lastModifiedDateTime`, which reshuffles the default
   ordering) and can invalidate the paging cursor you're deleting through. Building the
@@ -120,8 +125,8 @@ this scope — if a delete returns `403`, see Troubleshooting.
 4. Open the imported flow and confirm the trigger shows **chat = Notes / your
    self-chat**. (If the chat picker is empty, pick your "Notes"/self chat manually, or
    keep the `48:notes` value.) **Save**.
-5. Type **`/clear`** in your self-chat to fire it. (Keyword triggers poll, so allow up
-   to a minute.)
+5. Type **`clearchat`** in your self-chat to fire it. (Keyword triggers poll, so allow
+   up to a minute.)
 
 > Prefer the manual version? Import `ClearSelfChat_ManualButton.zip` instead and run it
 > from the **Run** button (web/desktop) or the Power Automate mobile app — handy as a
@@ -132,7 +137,7 @@ this scope — if a delete returns `403`, see Troubleshooting.
 ## Test it
 
 1. Post a few throwaway messages in the self-chat (e.g. `test1`, `test2`).
-2. Trigger the flow (`/clear` or the Run button).
+2. Trigger the flow (type `clearchat`, or use the Run button).
 3. Open the run in Power Automate → every action should be **green**, and
    `Delete_Each_Message` should show one iteration per message.
 4. The chat should empty out. (Teams may take a moment to reflect the deletions.)
@@ -144,7 +149,7 @@ If a step is red, open it and read the response — the
 
 ## Troubleshooting
 
-### 1. The flow never fires on `/clear`
+### 1. The flow never fires on `clearchat`
 The biggest **unknown** here: Teams has documented limits on triggering flows from the
 **chat-with-yourself** (e.g. the "For a selected message" action doesn't appear there).
 The keyword trigger *usually* works, but if nothing runs:
@@ -188,7 +193,7 @@ be removed by users.
 ## Rebuild by hand (if you'd rather not import)
 
 Create an automated cloud flow with the **When keywords are mentioned** trigger
-(search `"/clear"`, your self chat), then add the actions exactly as listed in
+(search `clearchat`, your self chat), then add the actions exactly as listed in
 [How it works](#how-the-corrected-flow-works). Every Graph call uses the Microsoft
 Teams connector's **"Send an HTTP request to Teams"** action (operation `HttpRequest`)
 with just **URI** + **Method** (+ no body for `softDelete`). The full, annotated

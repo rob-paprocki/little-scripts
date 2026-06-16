@@ -4,7 +4,7 @@
     "type": "Microsoft.Flow/flows",
     "properties": {
         "apiId": "/providers/Microsoft.PowerApps/apis/shared_logicflows",
-        "displayName": "Clear Message History (Keyword /clear)",
+        "displayName": "Clear Message History (Keyword: clearchat)",
         "definition": {
             "metadata": {
                 "creationSource": "Portal",
@@ -27,7 +27,7 @@
                     "type": "OpenApiConnectionWebhook",
                     "inputs": {
                         "parameters": {
-                            "$search": "\"/clear\"",
+                            "$search": "clearchat",
                             "threadType": "groupchat",
                             "requestBody/chats": [
                                 "48:notes"
