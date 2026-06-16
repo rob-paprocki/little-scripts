@@ -26,8 +26,8 @@ teams-clear-self-chat/
 
 > **Privacy note:** every committed file (and the zip) has had your tenant ID, user ID,
 > the `shared-teams-…` connection-instance name, and your work email **removed**. You
-> select your own Microsoft Teams connection during import; everything else (your
-> self-chat ID) is resolved at run time from `GET /me`.
+> select your own Microsoft Teams connection during import; the self-chat ID defaults to
+> the `48:notes` alias and is editable in one field.
 
 ---
 
@@ -53,18 +53,17 @@ teams-clear-self-chat/
 TRIGGER  "Manually trigger a flow" (Run button) — no inputs
 
 ACTIONS
-  1. Get_My_User_Id        GET  /me?$select=id
-  2. Initialize chatId     19:{myId}_{myId}@unq.gbl.spaces   ← the self-chat's Graph id
-  3. Initialize nextLink   /me/chats/{chatId}/messages?$top=50
-  4. Initialize messageIds []
+  1. Initialize chatId     "48:notes"   ← your self-chat (editable; see pre-check)
+  2. Initialize nextLink   /me/chats/{chatId}/messages?$top=50
+  3. Initialize messageIds []
 
-  5. Collect_All_Message_Ids  (Until nextLink is empty)   ← page through ALL messages
+  4. Collect_All_Message_Ids  (Until nextLink is empty)   ← page through ALL messages
        a. Get_Messages_Page        GET  {nextLink}
        b. Keep_Deletable_Messages  Filter: messageType == 'message' AND deletedDateTime is null
        c. Collect_Page_Ids         For each kept message → Append its id to messageIds
        d. Set_Next_Link            nextLink = @odata.nextLink (or '' to stop)
 
-  6. Delete_Each_Message  (For each id, sequential)
+  5. Delete_Each_Message  (For each id, sequential)
        • Soft_Delete_Message       POST /me/chats/{chatId}/messages/{id}/softDelete
 ```
 
@@ -88,6 +87,11 @@ ACTIONS
   items you can't delete.
 - **`$top=50`** is the API maximum; **sequential deletes** (`concurrency = 1`) stay under
   Graph's chat-write throttling, and the platform's default retry handles the rare `429`.
+- **Target the self-chat by its `48:notes` alias.** The Teams connector's HTTP action
+  only allows Graph paths under `me|users|teams` + `chats|messages|…`, so a bare
+  `GET /me` (to look up your id) is **rejected**. `48:notes` is the Teams alias for the
+  self-chat; if your tenant needs the full `19:…@unq.gbl.spaces` id instead, swap it into
+  `Initialize chatId` (see [Confirm your self-chat ID](#confirm-your-self-chat-id)).
 
 ### Permissions
 The Teams connector calls Graph with **delegated** permission; soft-delete needs
@@ -98,16 +102,15 @@ usually already carries this — if a delete returns `403`, see Troubleshooting.
 
 ## Confirm your self-chat ID
 
-The flow targets `19:{yourId}_{yourId}@unq.gbl.spaces`, the documented one-on-one chat
-id. This is correct for most tenants, but verify in 20 seconds so run #1 succeeds:
+The flow targets **`48:notes`** (the Teams alias for your self-chat) by default. If a run
+fails at `Get_Messages_Page` with a **404**, your tenant needs the full Graph id instead —
+get it in 20 seconds:
 
 1. Open [Graph Explorer](https://developer.microsoft.com/graph/graph-explorer), sign in.
 2. Run `GET https://graph.microsoft.com/v1.0/me/chats?$expand=members` and find the chat
-   whose **only member is you** — that's the self-chat. Copy its `id`.
-   - If it looks like `19:…_…@unq.gbl.spaces` with your id twice → the flow's default is
-     already right, nothing to change.
-   - If it's different (some tenants expose it as `48:notes`) → in the flow, open
-     **`Initialize chatId`** and replace the expression with that literal id.
+   whose **only member is you** — that's the self-chat. Copy its `id` (usually
+   `19:…_…@unq.gbl.spaces`).
+3. In the flow, open **`Initialize chatId`** and set its value to that literal id.
 
 ---
 
@@ -115,8 +118,9 @@ id. This is correct for most tenants, but verify in 20 seconds so run #1 succeed
 
 | Symptom | Cause & fix |
 |---|---|
-| `Get_My_User_Id` 401/403 | Teams connection not authorized — recreate it under **Data → Connections** and re-point the action. |
-| `Get_Messages_Page` 404 / "invalid chat id" | Your self-chat id differs from the default — set the real id in `Initialize chatId` (see [Confirm your self-chat ID](#confirm-your-self-chat-id)). |
+| `Get_Messages_Page` 401/403 | Teams connection not authorized — recreate it under **Data → Connections** and re-point the action. |
+| `Get_Messages_Page` 404 / "invalid chat id" | `48:notes` isn't accepted as a Graph chat id for your tenant — set the real id in `Initialize chatId` (see [Confirm your self-chat ID](#confirm-your-self-chat-id)). |
+| `Get_Messages_Page` "resource/object is not supported" | The connector only allows `me\|users\|teams` + `chats\|messages\|…` paths. The flow stays within those; if you edited a URI, keep it under `/me/chats/…`. |
 | `Soft_Delete_Message` 403 | Connector lacks **`Chat.ReadWrite`** consent — test `POST /me/chats/{id}/messages/{id}/softDelete` in Graph Explorer (it'll prompt for the scope), or ask an admin. |
 | Some deletes 429 | Throttling on large chats; platform retries. Just run again — already-deleted messages are skipped by the filter. |
 | Only *some* messages gone | `softDelete` only removes your own, non-system messages. In a self-chat that's everything except system notices (which can't be removed). |

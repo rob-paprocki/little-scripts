@@ -36,35 +36,15 @@
                 }
             },
             "actions": {
-                "Get_My_User_Id": {
-                    "runAfter": {},
-                    "type": "OpenApiConnection",
-                    "inputs": {
-                        "parameters": {
-                            "Uri": "https://graph.microsoft.com/v1.0/me?$select=id",
-                            "Method": "GET"
-                        },
-                        "host": {
-                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
-                            "connectionName": "shared_teams",
-                            "operationId": "HttpRequest"
-                        },
-                        "authentication": "@parameters('$authentication')"
-                    }
-                },
                 "Initialize_chatId": {
-                    "runAfter": {
-                        "Get_My_User_Id": [
-                            "Succeeded"
-                        ]
-                    },
+                    "runAfter": {},
                     "type": "InitializeVariable",
                     "inputs": {
                         "variables": [
                             {
                                 "name": "chatId",
                                 "type": "string",
-                                "value": "@concat('19:', body('Get_My_User_Id')?['id'], '_', body('Get_My_User_Id')?['id'], '@unq.gbl.spaces')"
+                                "value": "48:notes"
                             }
                         ]
                     }
