@@ -49,7 +49,7 @@ teams-clear-self-chat/
 ```
 
 > **Privacy note:** the packages and reference copies here have had your tenant ID,
-> user ID, the `shared-teams-…` connection-instance name, and your `@cti.com` email
+> user ID, the `shared-teams-…` connection-instance name, and your work email
 > **removed**. During import you'll simply select your own Microsoft Teams connection.
 
 ---
@@ -72,9 +72,8 @@ ACTIONS
   5. Collect_All_Message_Ids  (Until nextLink is empty)   ← page through ALL messages
        a. Get_Messages_Page        GET  {nextLink}
        b. Keep_Deletable_Messages  Filter: messageType == 'message' AND deletedDateTime is null
-       c. Select_Message_Ids       project to a list of ids
-       d. Append_Message_Ids       messageIds = union(messageIds, ids)
-       e. Set_Next_Link            nextLink = @odata.nextLink (or '' to stop)
+       c. Collect_Page_Ids         For each kept message → Append its id to messageIds
+       d. Set_Next_Link            nextLink = @odata.nextLink (or '' to stop)
 
   6. Delete_Each_Message  (For each id, sequential)
        • Soft_Delete_Message       POST /me/chats/{chatId}/messages/{id}/softDelete
@@ -84,8 +83,13 @@ ACTIONS
 
 - **Collect first, then delete.** Deleting while you page can skip or re-loop over
   messages (soft-delete changes `lastModifiedDateTime`, which reshuffles the default
-  ordering). Building the full id list first, then deleting, is order-independent and
-  can't loop forever — pagination ends when Graph stops returning `@odata.nextLink`.
+  ordering) and can invalidate the paging cursor you're deleting through. Building the
+  full id list first, then deleting, is order-independent and can't loop forever —
+  pagination ends when Graph stops returning `@odata.nextLink`.
+- **Grow the id list with "Append to array variable", not "Set variable".** Power
+  Automate rejects a `Set variable` whose new value references the same variable
+  (`Self reference is not supported`), so each page's ids are appended one at a time
+  inside a sequential inner `For each`.
 - **Filter in the flow, not the URL.** Because `$filter=deletedDateTime eq null` is
   rejected by Graph, the `Keep_Deletable_Messages` step does the equivalent filtering
   client-side and **also drops `systemEventMessage` items** you can't delete.
